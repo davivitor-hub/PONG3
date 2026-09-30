@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pong Game - Navegador</title>
+    <title>Neon Synthwave Pong</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
         * {
             box-sizing: border-box;
@@ -11,9 +12,9 @@
             padding: 0;
         }
         body {
-            background-color: #111;
+            background-color: #05050d;
             color: #fff;
-            font-family: 'Arial', sans-serif;
+            font-family: 'Orbitron', sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -21,16 +22,26 @@
             min-height: 100vh;
             overflow: hidden;
         }
+        .canvas-container {
+            position: relative;
+            border-radius: 16px;
+            padding: 4px;
+            background: linear-gradient(135deg, #ff007f, #00f0ff);
+            box-shadow: 0 0 30px rgba(0, 240, 255, 0.3), 0 0 50px rgba(255, 0, 127, 0.2);
+        }
         canvas {
-            border: 4px solid #333;
-            box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
-            background-color: #000;
+            display: block;
+            border-radius: 12px;
+            background-color: #080814;
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
 
-<canvas id="gameCanvas" width="800" height="600"></canvas>
+<div class="canvas-container">
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+</div>
 
 <script>
 const canvas = document.getElementById('gameCanvas');
@@ -39,7 +50,6 @@ const ctx = canvas.getContext('2d');
 const LARGURA = 800;
 const ALTURA = 600;
 
-// Estados do jogo
 const EstadoJogo = {
     MENU_MODO: 0,
     MENU_TIPO_JOGO: 1,
@@ -53,7 +63,6 @@ const EstadoJogo = {
 let estadoAtual = EstadoJogo.MENU_MODO;
 let estadoAnteriorOpcoes = EstadoJogo.MENU_MODO;
 
-// Configurações
 let modoBot = false;
 let modoTreino = false;
 let temPartidaSalva = false;
@@ -69,13 +78,11 @@ const OPCOES_PONTOS = [3, 5, 10, 15, 20];
 let indiceOpcaoPontos = 1;
 let pontosParaVencer = 5;
 
-// Navegação de menus
 let opcaoMenuModo = 0;
 let opcaoMenuTipoJogo = 0;
 let opcaoMenuOpcoes = 0;
 let opcaoMenuPausa = 0;
 
-// Mapeamento de teclas
 let teclaJ1Cima = "KeyW";
 let teclaJ1Baixo = "KeyS";
 let teclaJ2Cima = "ArrowUp";
@@ -83,45 +90,41 @@ let teclaJ2Baixo = "ArrowDown";
 let aguardandoReinstalaTecla = false;
 let acaoMapeando = "";
 
-// Mouse
-const ModoMouse = { DESATIVADO: 0, PLAYER_1: 1, PLAYER_2: 2 };
-let modoMouseAtual = ModoMouse.DESATIVADO;
-const NOMES_MODO_MOUSE = ["Desativado", "Jogador 1", "Jogador 2"];
+// Configurações do Mouse ajustadas
+let mouseAtivo = true;
+let jogadorMouse = 1; // 1 = Player 1, 2 = Player 2
 
-// Cores
 const CORES_DISPONIVEIS = [
-    "#FFFFFF", "#FF0000", "#00FF00", "#0000FF",
-    "#FFFF00", "#00FFFF", "#FF00FF", "#FFA500"
+    "#00F0FF", "#FF007F", "#39FF14", "#FFE600",
+    "#FF5E00", "#BF00FF", "#FFFFFF", "#00FFAB"
 ];
-const NOMES_CORES = ["Branco", "Vermelho", "Verde", "Azul", "Amarelo", "Ciano", "Magenta", "Laranja"];
+const NOMES_CORES = ["Ciano Neon", "Rosa Neon", "Verde Neon", "Amarelo Neon", "Laranja", "Roxo", "Branco", "Menta"];
 
-let idxCorJ1 = 0, idxCorJ2 = 0, idxCorBola = 0;
-let corJ1 = "#FFFFFF", corJ2 = "#FFFFFF", corBola = "#FFFFFF";
+let idxCorJ1 = 0, idxCorJ2 = 1, idxCorBola = 6;
+let corJ1 = CORES_DISPONIVEIS[0], corJ2 = CORES_DISPONIVEIS[1], corBola = CORES_DISPONIVEIS[6];
 
-// Dimensões customizáveis
 const OPCOES_TAM_RAQUETE = [60, 100, 140];
-const NOMES_TAM_RAQUETE = ["Pequena (60px)", "Média (100px)", "Grande (140px)"];
+const NOMES_TAM_RAQUETE = ["Pequena", "Média", "Grande"];
 let idxTamRaquete = 1, alturaRaquete = 100;
 
-const OPCOES_TAM_BOLA = [12, 20, 30];
-const NOMES_TAM_BOLA = ["Pequena (12px)", "Média (20px)", "Grande (30px)"];
-let idxTamBola = 1, tamanhoBola = 20;
+const OPCOES_TAM_BOLA = [12, 18, 26];
+const NOMES_TAM_BOLA = ["Pequena", "Média", "Grande"];
+let idxTamBola = 1, tamanhoBola = 18;
 
-const OPCOES_VEL_RAQUETE = [4, 6, 9];
-const NOMES_VEL_RAQUETE = ["Lenta (4px)", "Média (6px)", "Rápida (9px)"];
-let idxVelRaquete = 1, velocidadeRaquete = 6;
+const OPCOES_VEL_RAQUETE = [7, 10, 14];
+const NOMES_VEL_RAQUETE = ["Lenta", "Média", "Rápida"];
+let idxVelRaquete = 1, velocidadeRaquete = 10;
 
-const LARGURA_RAQUETE = 15;
+const LARGURA_RAQUETE = 14;
 
-// Física
-let velocidadeBolaAtual = 4.0;
-let velocidadeBolaBase = 4.0;
-let velocidadeBot = 4;
+let velocidadeBolaAtual = 7.0;
+let velocidadeBolaBase = 7.0;
+let velocidadeBot = 7;
 let bolaEsperandoInicio = false;
 
 let j1Y = 250, j2Y = 250;
 let bolaX = 400, bolaY = 300;
-let bolaXDir = 4, bolaYDir = 4;
+let bolaXDir = 7, bolaYDir = 7;
 
 let pontosJ1 = 0, pontosJ2 = 0;
 let rebatesTreinoAtual = 0, recordeTreino = 0;
@@ -129,15 +132,79 @@ let rebatesTreinoAtual = 0, recordeTreino = 0;
 let j1Cima = false, j1Baixo = false, j2Cima = false, j2Baixo = false;
 let mousePos = { x: 0, y: 0 };
 
-// Loop Principal
+// Rastro da bola e partículas
+let rastroBola = [];
+let particulas = [];
+let estrelasFundo = [];
+let offsetGrade = 0;
+
+// Inicializa fundo espacial
+for (let i = 0; i < 40; i++) {
+    estrelasFundo.push({
+        x: Math.random() * LARGURA,
+        y: Math.random() * ALTURA,
+        size: Math.random() * 2,
+        alpha: Math.random()
+    });
+}
+
 function gameLoop() {
     atualizar();
     desenhar();
     requestAnimationFrame(gameLoop);
 }
 
+function criarParticulas(x, y, cor, qtd = 15) {
+    for (let i = 0; i < qtd; i++) {
+        let angulo = Math.random() * Math.PI * 2;
+        let vel = Math.random() * 5 + 2;
+        particulas.push({
+            x: x,
+            y: y,
+            vx: Math.cos(angulo) * vel,
+            vy: Math.sin(angulo) * vel,
+            cor: cor,
+            vida: 1.0,
+            tamanho: Math.random() * 4 + 2
+        });
+    }
+}
+
+function desenharFundoAnimado() {
+    ctx.fillStyle = "#080814";
+    ctx.fillRect(0, 0, LARGURA, ALTURA);
+
+    for (let est of estrelasFundo) {
+        est.alpha += (Math.random() - 0.5) * 0.05;
+        if (est.alpha < 0.2) est.alpha = 0.2;
+        if (est.alpha > 1) est.alpha = 1;
+        ctx.fillStyle = `rgba(255, 255, 255, ${est.alpha})`;
+        ctx.fillRect(est.x, est.y, est.size, est.size);
+    }
+
+    ctx.save();
+    ctx.strokeStyle = "rgba(0, 240, 255, 0.08)";
+    ctx.lineWidth = 1;
+
+    for (let x = 0; x <= LARGURA; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, ALTURA);
+        ctx.stroke();
+    }
+
+    offsetGrade = (offsetGrade + 0.5) % 40;
+    for (let y = offsetGrade; y <= ALTURA; y += 40) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(LARGURA, y);
+        ctx.stroke();
+    }
+    ctx.restore();
+}
+
 function desenhar() {
-    ctx.clearRect(0, 0, LARGURA, ALTURA);
+    desenharFundoAnimado();
 
     switch (estadoAtual) {
         case EstadoJogo.MENU_MODO: desenharMenuModo(); break;
@@ -153,219 +220,233 @@ function desenhar() {
     }
 }
 
+function desenharTextoGlow(texto, x, y, cor, tamanho = 24, align = "center", glowSize = 15) {
+    ctx.save();
+    ctx.font = `bold ${tamanho}px Orbitron`;
+    ctx.textAlign = align;
+    ctx.shadowColor = cor;
+    ctx.shadowBlur = glowSize;
+    ctx.fillStyle = cor;
+    ctx.fillText(texto, x, y);
+    ctx.restore();
+}
+
 function desenharMenuModo() {
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 48px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText("PONG GAME", LARGURA / 2, 110);
+    desenharTextoGlow("NEON PONG", LARGURA / 2, 120, "#00F0FF", 52, "center", 25);
 
     const ops = [
-        temPartidaSalva ? "Continuar Partida Anterior" : "[Sem Partida Salva]",
-        "1 Jogador (vs Bot)",
-        "2 Jogadores",
-        "Modo Treino (Solo)",
-        "Opções do Jogo"
+        temPartidaSalva ? "CONTINUAR PARTIDA" : "[ SEM PARTIDA SALVA ]",
+        "1 JOGADOR (VS BOT)",
+        "2 JOGADORES",
+        "MODO TREINO (SOLO)",
+        "OPÇÕES DO JOGO"
     ];
 
-    ctx.font = "22px Arial";
-    ctx.textAlign = "left";
     for (let i = 0; i < ops.length; i++) {
-        if (i === 0 && !temPartidaSalva) {
-            ctx.fillStyle = "#888888";
-        } else {
-            ctx.fillStyle = opcaoMenuModo === i ? "#FFFF00" : "#FFFFFF";
-        }
-        let prefixo = opcaoMenuModo === i ? "> " : "   ";
-        ctx.fillText(prefixo + ops[i], LARGURA / 2 - 180, 180 + (i * 45));
+        let cor = (i === 0 && !temPartidaSalva) ? "#444" : (opcaoMenuModo === i ? "#FF007F" : "#FFFFFF");
+        let prefixo = opcaoMenuModo === i ? "> " : "  ";
+        desenharTextoGlow(prefixo + ops[i], LARGURA / 2, 220 + (i * 45), cor, 20, "center", opcaoMenuModo === i ? 15 : 0);
     }
 
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "italic 14px Arial";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+    ctx.font = "12px Orbitron";
     ctx.textAlign = "center";
-    ctx.fillText("Use W/S, SETAS ou MOUSE para navegar | ESPAÇO ou CLIQUE para confirmar", LARGURA / 2, 480);
+    ctx.fillText("NAVEGUE COM O MOUSE OU W/S / SETAS | CLIQUE PARA CONFIRMAR", LARGURA / 2, 530);
 }
 
 function desenharMenuOpcoes() {
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 36px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText("OPÇÕES DO JOGO", LARGURA / 2, 50);
+    desenharTextoGlow("CONFIGURAÇÕES", LARGURA / 2, 50, "#00F0FF", 32, "center", 20);
 
     const ops = [
         "Dificuldade: < " + NOMES_DIFICULDADE[dificuldadeAtual] + " >",
+        "Ativar Mouse: < " + (mouseAtivo ? "Sim" : "Não") + " >",
+        "Jogador com Mouse: < Jogador " + jogadorMouse + " >",
         "Cor Raquete J1: < " + NOMES_CORES[idxCorJ1] + " >",
         "Cor Raquete J2 / Parede: < " + NOMES_CORES[idxCorJ2] + " >",
-        "Cor da Bolinha: < " + NOMES_CORES[idxCorBola] + " >",
+        "Cor da Bola: < " + NOMES_CORES[idxCorBola] + " >",
         "Tamanho Raquete: < " + NOMES_TAM_RAQUETE[idxTamRaquete] + " >",
         "Tamanho Bola: < " + NOMES_TAM_BOLA[idxTamBola] + " >",
         "Velocidade Raquete: < " + NOMES_VEL_RAQUETE[idxVelRaquete] + " >",
-        "Controle por Mouse: < " + NOMES_MODO_MOUSE[modoMouseAtual] + " >",
         "Mapear J1 Subir: [ " + teclaJ1Cima + " ]",
         "Mapear J1 Descer: [ " + teclaJ1Baixo + " ]",
         "Mapear J2 Subir: [ " + teclaJ2Cima + " ]",
         "Mapear J2 Descer: [ " + teclaJ2Baixo + " ]",
-        "Voltar"
+        "VOLTAR"
     ];
 
-    ctx.font = "14px Arial";
+    ctx.font = "13px Orbitron";
     ctx.textAlign = "left";
     for (let i = 0; i < ops.length; i++) {
-        ctx.fillStyle = opcaoMenuOpcoes === i ? "#FFFF00" : "#FFFFFF";
-        let prefixo = opcaoMenuOpcoes === i ? "> " : "   ";
-        ctx.fillText(prefixo + ops[i], 80, 85 + (i * 30));
+        let cor = opcaoMenuOpcoes === i ? "#FFE600" : "#FFFFFF";
+        let prefixo = opcaoMenuOpcoes === i ? "► " : "  ";
+        desenharTextoGlow(prefixo + ops[i], 80, 85 + (i * 28), cor, 13, "left", opcaoMenuOpcoes === i ? 10 : 0);
     }
 
-    // Amostras de cores
-    ctx.fillStyle = corJ1;
-    ctx.fillRect(560, 102 - 14, 18, 18);
-    ctx.fillStyle = corJ2;
-    ctx.fillRect(560, 132 - 14, 18, 18);
-    ctx.fillStyle = corBola;
-    ctx.beginPath();
-    ctx.arc(569, 162 - 5, 9, 0, Math.PI * 2);
-    ctx.fill();
-
     if (aguardandoReinstalaTecla) {
-        ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
-        ctx.fillRect(150, 200, 500, 150);
-        ctx.strokeStyle = "#FFFF00";
-        ctx.strokeRect(150, 200, 500, 150);
-        ctx.fillStyle = "#FFFF00";
-        ctx.font = "bold 16px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText("Pressione a nova tecla para: " + acaoMapeando, LARGURA / 2, 280);
+        ctx.fillStyle = "rgba(5, 5, 20, 0.95)";
+        ctx.fillRect(150, 220, 500, 140);
+        ctx.strokeStyle = "#FF007F";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(150, 220, 500, 140);
+        desenharTextoGlow("PRESSIONE A NOVA TECLA PARA:", LARGURA / 2, 270, "#FFFFFF", 16);
+        desenharTextoGlow(acaoMapeando, LARGURA / 2, 310, "#00F0FF", 20);
     }
 }
 
 function desenharMenuTipoJogo() {
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 40px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText("Tipo de Partida", LARGURA / 2, 170);
+    desenharTextoGlow("TIPO DE PARTIDA", LARGURA / 2, 170, "#00F0FF", 36);
 
-    const ops = ["Partida por Pontos", "Modo Infinito"];
-    ctx.font = "22px Arial";
-    ctx.textAlign = "left";
+    const ops = ["PARTIDA POR PONTOS", "MODO INFINITO"];
     for (let i = 0; i < ops.length; i++) {
-        ctx.fillStyle = opcaoMenuTipoJogo === i ? "#FFFF00" : "#FFFFFF";
-        let prefixo = opcaoMenuTipoJogo === i ? "> " : "   ";
-        ctx.fillText(prefixo + ops[i], LARGURA / 2 - 120, 260 + (i * 60));
+        let cor = opcaoMenuTipoJogo === i ? "#FF007F" : "#FFFFFF";
+        let prefixo = opcaoMenuTipoJogo === i ? "> " : "  ";
+        desenharTextoGlow(prefixo + ops[i], LARGURA / 2, 270 + (i * 60), cor, 22);
     }
 }
 
 function desenharMenuMetaPontos() {
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 40px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText("Meta de Pontos", LARGURA / 2, 130);
+    desenharTextoGlow("META DE PONTOS", LARGURA / 2, 140, "#00F0FF", 36);
 
-    ctx.font = "20px Arial";
-    ctx.textAlign = "left";
     for (let i = 0; i < OPCOES_PONTOS.length; i++) {
-        ctx.fillStyle = indiceOpcaoPontos === i ? "#FFFF00" : "#FFFFFF";
-        let prefixo = indiceOpcaoPontos === i ? "> " : "   ";
-        ctx.fillText(prefixo + OPCOES_PONTOS[i] + " Pontos", LARGURA / 2 - 80, 200 + (i * 45));
+        let cor = indiceOpcaoPontos === i ? "#FF007F" : "#FFFFFF";
+        let prefixo = indiceOpcaoPontos === i ? "> " : "  ";
+        desenharTextoGlow(prefixo + OPCOES_PONTOS[i] + " PONTOS", LARGURA / 2, 220 + (i * 48), cor, 20);
     }
 }
 
 function desenharJogo() {
+    ctx.save();
     if (!modoTreino) {
-        ctx.fillStyle = "#FFFFFF";
-        for (let i = 0; i < ALTURA; i += 30) {
-            ctx.fillRect(LARGURA / 2 - 2, i, 4, 15);
-        }
-
-        ctx.fillStyle = corJ2;
-        ctx.fillRect(LARGURA - 30 - LARGURA_RAQUETE, j2Y, LARGURA_RAQUETE, alturaRaquete);
-    } else {
-        ctx.fillStyle = corJ2;
-        ctx.fillRect(LARGURA - 10, 0, 10, ALTURA);
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+        ctx.lineWidth = 4;
+        ctx.setLineDash([15, 15]);
+        ctx.beginPath();
+        ctx.moveTo(LARGURA / 2, 0);
+        ctx.lineTo(LARGURA / 2, ALTURA);
+        ctx.stroke();
     }
+    ctx.restore();
 
+    ctx.save();
+    ctx.shadowColor = corJ1;
+    ctx.shadowBlur = 20;
     ctx.fillStyle = corJ1;
     ctx.fillRect(30, j1Y, LARGURA_RAQUETE, alturaRaquete);
 
+    if (!modoTreino) {
+        ctx.shadowColor = corJ2;
+        ctx.shadowBlur = 20;
+        ctx.fillStyle = corJ2;
+        ctx.fillRect(LARGURA - 30 - LARGURA_RAQUETE, j2Y, LARGURA_RAQUETE, alturaRaquete);
+    } else {
+        ctx.shadowColor = corJ2;
+        ctx.shadowBlur = 20;
+        ctx.fillStyle = corJ2;
+        ctx.fillRect(LARGURA - 10, 0, 10, ALTURA);
+    }
+    ctx.restore();
+
+    for (let i = 0; i < rastroBola.length; i++) {
+        let p = rastroBola[i];
+        let alpha = (i + 1) / rastroBola.length * 0.4;
+        ctx.save();
+        ctx.fillStyle = corBola;
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, (tamanhoBola / 2) * (i / rastroBola.length), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    for (let i = particulas.length - 1; i >= 0; i--) {
+        let pt = particulas[i];
+        pt.x += pt.vx;
+        pt.y += pt.vy;
+        pt.vida -= 0.03;
+
+        if (pt.vida <= 0) {
+            particulas.splice(i, 1);
+            continue;
+        }
+
+        ctx.save();
+        ctx.globalAlpha = pt.vida;
+        ctx.shadowColor = pt.cor;
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = pt.cor;
+        ctx.fillRect(pt.x, pt.y, pt.tamanho, pt.tamanho);
+        ctx.restore();
+    }
+
+    ctx.save();
+    ctx.shadowColor = corBola;
+    ctx.shadowBlur = 25;
     ctx.fillStyle = corBola;
     ctx.beginPath();
     ctx.arc(bolaX + tamanhoBola / 2, bolaY + tamanhoBola / 2, tamanhoBola / 2, 0, Math.PI * 2);
     ctx.fill();
-
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 20px Arial";
-    ctx.textAlign = "left";
+    ctx.restore();
 
     if (modoTreino) {
-        ctx.fillText("Rebates: " + rebatesTreinoAtual, 180, 60);
-        ctx.fillText("Recorde: " + recordeTreino, 500, 60);
+        desenharTextoGlow("REBATES: " + rebatesTreinoAtual, 200, 50, "#00F0FF", 20);
+        desenharTextoGlow("RECORDE: " + recordeTreino, 600, 50, "#FF007F", 20);
     } else {
-        ctx.fillText("Jogador 1: " + pontosJ1, 160, 60);
-        let nomeJ2 = modoBot ? "Bot: " : "Jogador 2: ";
-        ctx.fillText(nomeJ2 + pontosJ2, 500, 60);
+        desenharTextoGlow("" + pontosJ1, LARGURA / 2 - 80, 70, corJ1, 48);
+        desenharTextoGlow("" + pontosJ2, LARGURA / 2 + 80, 70, corJ2, 48);
     }
 
     if (bolaEsperandoInicio) {
-        ctx.fillStyle = "#FFFF00";
-        ctx.font = "bold 16px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText("Pressione qualquer tecla ou clique com o mouse para iniciar!", LARGURA / 2, 120);
+        desenharTextoGlow("CLIQUE OU PRESSIONE UMA TECLA PARA COMEÇAR", LARGURA / 2, 140, "#FFE600", 16, "center", 10);
     }
 }
 
 function desenharMenuPausa() {
-    ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+    ctx.fillStyle = "rgba(5, 5, 15, 0.85)";
     ctx.fillRect(0, 0, LARGURA, ALTURA);
 
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 40px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText("PAUSA", LARGURA / 2, 180);
+    desenharTextoGlow("PAUSA", LARGURA / 2, 180, "#00F0FF", 48, "center", 25);
 
-    const ops = ["Continuar Jogo", "Opções do Jogo", "Resetar Pontos", "Voltar ao Menu Principal"];
-    ctx.font = "22px Arial";
-    ctx.textAlign = "left";
+    const ops = ["CONTINUAR", "CONFIGURAÇÕES", "RESETAR PONTOS", "MENU PRINCIPAL"];
     for (let i = 0; i < ops.length; i++) {
-        ctx.fillStyle = opcaoMenuPausa === i ? "#FFFF00" : "#FFFFFF";
-        let prefixo = opcaoMenuPausa === i ? "> " : "   ";
-        ctx.fillText(prefixo + ops[i], LARGURA / 2 - 140, 250 + (i * 50));
+        let cor = opcaoMenuPausa === i ? "#FF007F" : "#FFFFFF";
+        let prefixo = opcaoMenuPausa === i ? "> " : "  ";
+        desenharTextoGlow(prefixo + ops[i], LARGURA / 2, 270 + (i * 50), cor, 22);
     }
 }
 
 function desenharFimDeJogo() {
-    ctx.fillStyle = "#FF0000";
-    ctx.font = "bold 40px Arial";
+    desenharTextoGlow("FIM DE JOGO", LARGURA / 2, 200, "#FF007F", 52, "center", 30);
+
+    let vencedor = (pontosJ1 >= pontosParaVencer) ? "JOGADOR 1 VENCEU!" : (modoBot ? "O BOT VENCEU!" : "JOGADOR 2 VENCEU!");
+    desenharTextoGlow(vencedor, LARGURA / 2, 300, "#00F0FF", 28);
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+    ctx.font = "14px Orbitron";
     ctx.textAlign = "center";
-    ctx.fillText("FIM DE JOGO", LARGURA / 2, 220);
-
-    let vencedor = (pontosJ1 >= pontosParaVencer) ? "Jogador 1 Venceu!" : (modoBot ? "O Bot Venceu!" : "Jogador 2 Venceu!");
-
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 26px Arial";
-    ctx.fillText(vencedor, LARGURA / 2, 310);
-
-    ctx.font = "italic 16px Arial";
-    ctx.fillText("Pressione ESPAÇO, ESC ou CLIQUE para voltar ao Menu", LARGURA / 2, 410);
+    ctx.fillText("PRESSIONE ESPAÇO, ESC OU CLIQUE PARA VOLTAR", LARGURA / 2, 420);
 }
 
 function aplicarDificuldade() {
+    // Aumento geral da velocidade das dificuldades
     switch (dificuldadeAtual) {
-        case Dificuldade.FACIL: velocidadeBolaBase = 3.0; velocidadeBot = 2; break;
-        case Dificuldade.MEDIO: velocidadeBolaBase = 5.0; velocidadeBot = 4; break;
-        case Dificuldade.DIFICIL: velocidadeBolaBase = 7.0; velocidadeBot = 6; break;
-        case Dificuldade.FRENESI: velocidadeBolaBase = 3.0; velocidadeBot = 6; break;
+        case Dificuldade.FACIL:   velocidadeBolaBase = 6.0;  velocidadeBot = 5;  break;
+        case Dificuldade.MEDIO:   velocidadeBolaBase = 8.5;  velocidadeBot = 8;  break;
+        case Dificuldade.DIFICIL: velocidadeBolaBase = 12.0; velocidadeBot = 11; break;
+        case Dificuldade.FRENESI: velocidadeBolaBase = 6.0;  velocidadeBot = 11; break;
     }
     let velocidadeAntiga = velocidadeBolaAtual;
     velocidadeBolaAtual = velocidadeBolaBase;
 
     if (velocidadeAntiga !== 0) {
-        let fatorProporcao = velocidadeBolaAtual / velocidadeAntiga;
-        bolaXDir *= fatorProporcao;
-        bolaYDir *= fatorProporcao;
+        let fator = velocidadeBolaAtual / velocidadeAntiga;
+        bolaXDir *= fator;
+        bolaYDir *= fator;
     }
 }
 
 function aumentarVelocidadeFrenesi() {
-    if (dificuldadeAtual === Dificuldade.FRENESI && velocidadeBolaAtual < 14.0) {
-        velocidadeBolaAtual += 0.5;
+    if (dificuldadeAtual === Dificuldade.FRENESI && velocidadeBolaAtual < 22.0) {
+        velocidadeBolaAtual += 0.8;
         let sinalX = bolaXDir > 0 ? 1 : -1;
         let sinalY = bolaYDir > 0 ? 1 : -1;
         bolaXDir = sinalX * velocidadeBolaAtual;
@@ -377,7 +458,7 @@ function atualizar() {
     if (estadoAtual !== EstadoJogo.JOGANDO) return;
 
     // Movimento J1
-    if (modoMouseAtual === ModoMouse.PLAYER_1) {
+    if (mouseAtivo && jogadorMouse === 1) {
         j1Y = mousePos.y - (alturaRaquete / 2.0);
     } else {
         if (j1Cima) j1Y -= velocidadeRaquete;
@@ -400,7 +481,7 @@ function atualizar() {
                 }
             }
         } else {
-            if (modoMouseAtual === ModoMouse.PLAYER_2) {
+            if (mouseAtivo && jogadorMouse === 2) {
                 j2Y = mousePos.y - (alturaRaquete / 2.0);
             } else {
                 if (j2Cima) j2Y -= velocidadeRaquete;
@@ -417,17 +498,21 @@ function atualizar() {
         bolaX += bolaXDir;
         bolaY += bolaYDir;
 
-        // Topo / Base
+        rastroBola.push({ x: bolaX + tamanhoBola / 2, y: bolaY + tamanhoBola / 2 });
+        if (rastroBola.length > 8) rastroBola.shift();
+
         if (bolaY <= 0 || bolaY >= ALTURA - tamanhoBola) {
             bolaYDir = -bolaYDir;
+            criarParticulas(bolaX + tamanhoBola / 2, bolaY <= 0 ? 0 : ALTURA, corBola, 10);
         }
 
-        // Colisão J1
         if (bolaX <= 30 + LARGURA_RAQUETE && bolaX >= 30) {
             if (bolaY + tamanhoBola >= j1Y && bolaY <= j1Y + alturaRaquete) {
                 bolaXDir = Math.abs(bolaXDir);
                 bolaX = 30 + LARGURA_RAQUETE + 1;
+                criarParticulas(bolaX, bolaY + tamanhoBola / 2, corJ1, 20);
                 aumentarVelocidadeFrenesi();
+
                 if (modoTreino) {
                     rebatesTreinoAtual++;
                     if (rebatesTreinoAtual > recordeTreino) recordeTreino = rebatesTreinoAtual;
@@ -435,11 +520,11 @@ function atualizar() {
             }
         }
 
-        // Colisão Direita (J2 / Parede)
         if (modoTreino) {
             if (bolaX + tamanhoBola >= LARGURA - 10) {
                 bolaXDir = -Math.abs(bolaXDir);
                 bolaX = LARGURA - 10 - tamanhoBola - 1;
+                criarParticulas(LARGURA - 10, bolaY + tamanhoBola / 2, corJ2, 20);
                 aumentarVelocidadeFrenesi();
             }
         } else {
@@ -447,12 +532,12 @@ function atualizar() {
                 if (bolaY + tamanhoBola >= j2Y && bolaY <= j2Y + alturaRaquete) {
                     bolaXDir = -Math.abs(bolaXDir);
                     bolaX = LARGURA - 30 - LARGURA_RAQUETE - tamanhoBola - 1;
+                    criarParticulas(bolaX + tamanhoBola, bolaY + tamanhoBola / 2, corJ2, 20);
                     aumentarVelocidadeFrenesi();
                 }
             }
         }
 
-        // Pontos
         if (bolaX < 0) {
             if (modoTreino) {
                 rebatesTreinoAtual = 0;
@@ -482,6 +567,7 @@ function reiniciarBola() {
     bolaX = LARGURA / 2.0 - tamanhoBola / 2.0;
     bolaY = ALTURA / 2.0 - tamanhoBola / 2.0;
     velocidadeBolaAtual = velocidadeBolaBase;
+    rastroBola = [];
 
     let angulo;
     if (modoTreino) {
@@ -522,41 +608,43 @@ function alterarOpcaoOpcoes(direcao) {
             aplicarDificuldade();
             break;
         case 1:
+            mouseAtivo = !mouseAtivo;
+            break;
+        case 2:
+            jogadorMouse = jogadorMouse === 1 ? 2 : 1;
+            break;
+        case 3:
             idxCorJ1 = (idxCorJ1 + direcao + CORES_DISPONIVEIS.length) % CORES_DISPONIVEIS.length;
             corJ1 = CORES_DISPONIVEIS[idxCorJ1];
             break;
-        case 2:
+        case 4:
             idxCorJ2 = (idxCorJ2 + direcao + CORES_DISPONIVEIS.length) % CORES_DISPONIVEIS.length;
             corJ2 = CORES_DISPONIVEIS[idxCorJ2];
             break;
-        case 3:
+        case 5:
             idxCorBola = (idxCorBola + direcao + CORES_DISPONIVEIS.length) % CORES_DISPONIVEIS.length;
             corBola = CORES_DISPONIVEIS[idxCorBola];
             break;
-        case 4:
+        case 6:
             idxTamRaquete = (idxTamRaquete + direcao + OPCOES_TAM_RAQUETE.length) % OPCOES_TAM_RAQUETE.length;
             alturaRaquete = OPCOES_TAM_RAQUETE[idxTamRaquete];
             break;
-        case 5:
+        case 7:
             idxTamBola = (idxTamBola + direcao + OPCOES_TAM_BOLA.length) % OPCOES_TAM_BOLA.length;
             tamanhoBola = OPCOES_TAM_BOLA[idxTamBola];
             break;
-        case 6:
+        case 8:
             idxVelRaquete = (idxVelRaquete + direcao + OPCOES_VEL_RAQUETE.length) % OPCOES_VEL_RAQUETE.length;
             velocidadeRaquete = OPCOES_VEL_RAQUETE[idxVelRaquete];
             break;
-        case 7:
-            modoMouseAtual = (modoMouseAtual + direcao + 3) % 3;
-            break;
-        case 8: aguardandoReinstalaTecla = true; acaoMapeando = "J1 Subir"; break;
-        case 9: aguardandoReinstalaTecla = true; acaoMapeando = "J1 Descer"; break;
-        case 10: aguardandoReinstalaTecla = true; acaoMapeando = "J2 Subir"; break;
-        case 11: aguardandoReinstalaTecla = true; acaoMapeando = "J2 Descer"; break;
-        case 12: estadoAtual = estadoAnteriorOpcoes; break;
+        case 9: aguardandoReinstalaTecla = true; acaoMapeando = "J1 Subir"; break;
+        case 10: aguardandoReinstalaTecla = true; acaoMapeando = "J1 Descer"; break;
+        case 11: aguardandoReinstalaTecla = true; acaoMapeando = "J2 Subir"; break;
+        case 12: aguardandoReinstalaTecla = true; acaoMapeando = "J2 Descer"; break;
+        case 13: estadoAtual = estadoAnteriorOpcoes; break;
     }
 }
 
-// Controles Teclado
 window.addEventListener('keydown', (e) => {
     if (aguardandoReinstalaTecla) {
         if (acaoMapeando === "J1 Subir") teclaJ1Cima = e.code;
@@ -586,8 +674,8 @@ window.addEventListener('keydown', (e) => {
         else if (e.code === "Escape") estadoAtual = EstadoJogo.MENU_TIPO_JOGO;
     } 
     else if (estadoAtual === EstadoJogo.MENU_OPCOES) {
-        if (e.code === "KeyW" || e.code === "ArrowUp") opcaoMenuOpcoes = (opcaoMenuOpcoes - 1 + 13) % 13;
-        else if (e.code === "KeyS" || e.code === "ArrowDown") opcaoMenuOpcoes = (opcaoMenuOpcoes + 1) % 13;
+        if (e.code === "KeyW" || e.code === "ArrowUp") opcaoMenuOpcoes = (opcaoMenuOpcoes - 1 + 14) % 14;
+        else if (e.code === "KeyS" || e.code === "ArrowDown") opcaoMenuOpcoes = (opcaoMenuOpcoes + 1) % 14;
         else if (e.code === "KeyD" || e.code === "ArrowRight") alterarOpcaoOpcoes(1);
         else if (e.code === "KeyA" || e.code === "ArrowLeft") alterarOpcaoOpcoes(-1);
         else if (e.code === "Space" || e.code === "Enter") alterarOpcaoOpcoes(1);
@@ -628,7 +716,6 @@ window.addEventListener('keyup', (e) => {
     if (e.code === teclaJ2Baixo) j2Baixo = false;
 });
 
-// Ações de Confirmação
 function confirmarMenuModo() {
     if (opcaoMenuModo === 0 && temPartidaSalva) {
         estadoAtual = EstadoJogo.JOGANDO;
@@ -674,52 +761,47 @@ function confirmarMenuPausa() {
     } else if (opcaoMenuPausa === 3) estadoAtual = EstadoJogo.MENU_MODO;
 }
 
-// Mouse Eventos
+// Suporte total ao mouse na navegação de menus
 canvas.addEventListener('mousemove', (e) => {
     const rect = canvas.getBoundingClientRect();
     mousePos.x = e.clientX - rect.left;
     mousePos.y = e.clientY - rect.top;
 
-    let mouseY = mousePos.y;
+    let y = mousePos.y;
 
     if (estadoAtual === EstadoJogo.MENU_MODO) {
         for (let i = 0; i < 5; i++) {
-            let topY = 155 + (i * 45);
-            if (mouseY >= topY && mouseY <= topY + 35) {
+            let itemY = 220 + (i * 45);
+            if (y >= itemY - 20 && y <= itemY + 20) {
                 opcaoMenuModo = i;
-                break;
             }
         }
     } else if (estadoAtual === EstadoJogo.MENU_TIPO_JOGO) {
         for (let i = 0; i < 2; i++) {
-            let topY = 235 + (i * 60);
-            if (mouseY >= topY && mouseY <= topY + 45) {
+            let itemY = 270 + (i * 60);
+            if (y >= itemY - 20 && y <= itemY + 20) {
                 opcaoMenuTipoJogo = i;
-                break;
             }
         }
     } else if (estadoAtual === EstadoJogo.MENU_META_PONTOS) {
         for (let i = 0; i < OPCOES_PONTOS.length; i++) {
-            let topY = 175 + (i * 45);
-            if (mouseY >= topY && mouseY <= topY + 35) {
+            let itemY = 220 + (i * 48);
+            if (y >= itemY - 20 && y <= itemY + 20) {
                 indiceOpcaoPontos = i;
-                break;
             }
         }
     } else if (estadoAtual === EstadoJogo.MENU_OPCOES) {
-        for (let i = 0; i < 13; i++) {
-            let topY = 65 + (i * 30);
-            if (mouseY >= topY && mouseY <= topY + 25) {
+        for (let i = 0; i < 14; i++) {
+            let itemY = 85 + (i * 28);
+            if (y >= itemY - 14 && y <= itemY + 14) {
                 opcaoMenuOpcoes = i;
-                break;
             }
         }
     } else if (estadoAtual === EstadoJogo.PAUSADO) {
         for (let i = 0; i < 4; i++) {
-            let topY = 225 + (i * 50);
-            if (mouseY >= topY && mouseY <= topY + 40) {
+            let itemY = 270 + (i * 50);
+            if (y >= itemY - 20 && y <= itemY + 20) {
                 opcaoMenuPausa = i;
-                break;
             }
         }
     }
@@ -743,7 +825,6 @@ canvas.addEventListener('mousedown', (e) => {
     }
 });
 
-// Inicia a aplicação
 gameLoop();
 </script>
 
