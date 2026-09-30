@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Neon Synthwave Pong</title>
+    <title>Pong das 7 Sombras</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
         * {
@@ -120,6 +120,7 @@ const LARGURA_RAQUETE = 14;
 let velocidadeBolaAtual = 7.0;
 let velocidadeBolaBase = 7.0;
 let velocidadeBot = 7;
+let suavizacaoBot = 0.08; // Suavidade de movimento do BOT
 let bolaEsperandoInicio = false;
 
 let j1Y = 250, j2Y = 250;
@@ -232,7 +233,7 @@ function desenharTextoGlow(texto, x, y, cor, tamanho = 24, align = "center", glo
 }
 
 function desenharMenuModo() {
-    desenharTextoGlow("NEON PONG", LARGURA / 2, 120, "#00F0FF", 52, "center", 25);
+    desenharTextoGlow("PONG DAS 7 SOMBRAS", LARGURA / 2, 120, "#00F0FF", 42, "center", 25);
 
     const ops = [
         temPartidaSalva ? "CONTINUAR PARTIDA" : "[ SEM PARTIDA SALVA ]",
@@ -427,12 +428,27 @@ function desenharFimDeJogo() {
 }
 
 function aplicarDificuldade() {
-    // Aumento geral da velocidade das dificuldades
     switch (dificuldadeAtual) {
-        case Dificuldade.FACIL:   velocidadeBolaBase = 6.0;  velocidadeBot = 5;  break;
-        case Dificuldade.MEDIO:   velocidadeBolaBase = 8.5;  velocidadeBot = 8;  break;
-        case Dificuldade.DIFICIL: velocidadeBolaBase = 12.0; velocidadeBot = 11; break;
-        case Dificuldade.FRENESI: velocidadeBolaBase = 6.0;  velocidadeBot = 11; break;
+        case Dificuldade.FACIL:
+            velocidadeBolaBase = 6.0;
+            velocidadeBot = 5;
+            suavizacaoBot = 0.05;
+            break;
+        case Dificuldade.MEDIO:
+            velocidadeBolaBase = 8.5;
+            velocidadeBot = 8;
+            suavizacaoBot = 0.09;
+            break;
+        case Dificuldade.DIFICIL:
+            velocidadeBolaBase = 12.0;
+            velocidadeBot = 12;
+            suavizacaoBot = 0.15;
+            break;
+        case Dificuldade.FRENESI:
+            velocidadeBolaBase = 6.0;
+            velocidadeBot = 15;
+            suavizacaoBot = 0.22;
+            break;
     }
     let velocidadeAntiga = velocidadeBolaAtual;
     velocidadeBolaAtual = velocidadeBolaBase;
@@ -468,18 +484,26 @@ function atualizar() {
     if (j1Y < 0) j1Y = 0;
     if (j1Y > ALTURA - alturaRaquete) j1Y = ALTURA - alturaRaquete;
 
-    // Movimento J2 / Bot
+    // Movimento J2 / Bot Aprimorado
     if (!modoTreino) {
         if (modoBot) {
+            let alvoY = ALTURA / 2 - alturaRaquete / 2; // Posição neutra no centro caso a bola vá para longe
+            
             if (bolaXDir > 0) {
-                let centroRaquete = j2Y + alturaRaquete / 2.0;
-                let centroBola = bolaY + tamanhoBola / 2.0;
-                if (centroRaquete < centroBola && j2Y < ALTURA - alturaRaquete) {
-                    j2Y += velocidadeBot;
-                } else if (centroRaquete > centroBola && j2Y > 0) {
-                    j2Y -= velocidadeBot;
-                }
+                // Apenas rastreia quando a bola está vindo em sua direção
+                alvoY = (bolaY + tamanhoBola / 2) - (alturaRaquete / 2);
             }
+
+            // Movimento suave sem travamentos ou tremedeiras (Interpolação Lerp)
+            let deltaY = alvoY - j2Y;
+            let passo = deltaY * suavizacaoBot;
+
+            // Limita a velocidade do bot para evitar teleportes
+            if (Math.abs(passo) > velocidadeBot) {
+                passo = Math.sign(passo) * velocidadeBot;
+            }
+
+            j2Y += passo;
         } else {
             if (mouseAtivo && jogadorMouse === 2) {
                 j2Y = mousePos.y - (alturaRaquete / 2.0);
