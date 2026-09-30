@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pong Game - Navegador</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            background-color: #111;
+            color: #fff;
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        canvas {
+            border: 4px solid #333;
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+            background-color: #000;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="gameCanvas" width="800" height="600"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+const LARGURA = 800;
+const ALTURA = 600;
+
+// Estados do jogo
+const EstadoJogo = {
+    MENU_MODO: 0,
+    MENU_TIPO_JOGO: 1,
+    MENU_META_PONTOS: 2,
+    MENU_OPCOES: 3,
+    JOGANDO: 4,
+    PAUSADO: 5,
+    FIM_DE_JOGO: 6
+};
+
+let estadoAtual = EstadoJogo.MENU_MODO;
+let estadoAnteriorOpcoes = EstadoJogo.MENU_MODO;
+
+// Configurações
+let modoBot = false;
+let modoTreino = false;
+let temPartidaSalva = false;
+
+const TipoJogo = { PONTOS_DEFINIDOS: 0, INFINITO: 1 };
+let tipoJogoAtual = TipoJogo.PONTOS_DEFINIDOS;
+
+const Dificuldade = { FACIL: 0, MEDIO: 1, DIFICIL: 2, FRENESI: 3 };
+let dificuldadeAtual = Dificuldade.MEDIO;
+const NOMES_DIFICULDADE = ["Fácil", "Médio", "Difícil", "Frenesi"];
+
+const OPCOES_PONTOS = [3, 5, 10, 15, 20];
+let indiceOpcaoPontos = 1;
+let pontosParaVencer = 5;
+
+// Navegação de menus
+let opcaoMenuModo = 0;
+let opcaoMenuTipoJogo = 0;
+let opcaoMenuOpcoes = 0;
+let opcaoMenuPausa = 0;
+
+// Mapeamento de teclas
+let teclaJ1Cima = "KeyW";
+let teclaJ1Baixo = "KeyS";
+let teclaJ2Cima = "ArrowUp";
+let teclaJ2Baixo = "ArrowDown";
+let aguardandoReinstalaTecla = false;
+let acaoMapeando = "";
+
+// Mouse
+const ModoMouse = { DESATIVADO: 0, PLAYER_1: 1, PLAYER_2: 2 };
+let modoMouseAtual = ModoMouse.DESATIVADO;
+const NOMES_MODO_MOUSE = ["Desativado", "Jogador 1", "Jogador 2"];
+
+// Cores
+const CORES_DISPONIVEIS = [
+    "#FFFFFF", "#FF0000", "#00FF00", "#0000FF",
+    "#FFFF00", "#00FFFF", "#FF00FF", "#FFA500"
+];
+const NOMES_CORES = ["Branco", "Vermelho", "Verde", "Azul", "Amarelo", "Ciano", "Magenta", "Laranja"];
+
+let idxCorJ1 = 0, idxCorJ2 = 0, idxCorBola = 0;
+let corJ1 = "#FFFFFF", corJ2 = "#FFFFFF", corBola = "#FFFFFF";
+
+// Dimensões customizáveis
+const OPCOES_TAM_RAQUETE = [60, 100, 140];
+const NOMES_TAM_RAQUETE = ["Pequena (60px)", "Média (100px)", "Grande (140px)"];
+let idxTamRaquete = 1, alturaRaquete = 100;
+
+const OPCOES_TAM_BOLA = [12, 20, 30];
+const NOMES_TAM_BOLA = ["Pequena (12px)", "Média (20px)", "Grande (30px)"];
+let idxTamBola = 1, tamanhoBola = 20;
+
+const OPCOES_VEL_RAQUETE = [4, 6, 9];
+const NOMES_VEL_RAQUETE = ["Lenta (4px)", "Média (6px)", "Rápida (9px)"];
+let idxVelRaquete = 1, velocidadeRaquete = 6;
+
+const LARGURA_RAQUETE = 15;
+
+// Física
+let velocidadeBolaAtual = 4.0;
+let velocidadeBolaBase = 4.0;
+let velocidadeBot = 4;
+let bolaEsperandoInicio = false;
+
+let j1Y = 250, j2Y = 250;
+let bolaX = 400, bolaY = 300;
+let bolaXDir = 4, bolaYDir = 4;
+
+let pontosJ1 = 0, pontosJ2 = 0;
+let rebatesTreinoAtual = 0, recordeTreino = 0;
+
+let j1Cima = false, j1Baixo = false, j2Cima = false, j2Baixo = false;
+let mousePos = { x: 0, y: 0 };
+
+// Loop Principal
+function gameLoop() {
+    atualizar();
+    desenhar();
+    requestAnimationFrame(gameLoop);
+}
+
+function desenhar() {
+    ctx.clearRect(0, 0, LARGURA, ALTURA);
+
+    switch (estadoAtual) {
+        case EstadoJogo.MENU_MODO: desenharMenuModo(); break;
+        case EstadoJogo.MENU_TIPO_JOGO: desenharMenuTipoJogo(); break;
+        case EstadoJogo.MENU_META_PONTOS: desenharMenuMetaPontos(); break;
+        case EstadoJogo.MENU_OPCOES: desenharMenuOpcoes(); break;
+        case EstadoJogo.JOGANDO: desenharJogo(); break;
+        case EstadoJogo.PAUSADO:
+            desenharJogo();
+            desenharMenuPausa();
+            break;
+        case EstadoJogo.FIM_DE_JOGO: desenharFimDeJogo(); break;
+    }
+}
+
+function desenharMenuModo() {
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 48px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("PONG GAME", LARGURA / 2, 110);
+
+    const ops = [
+        temPartidaSalva ? "Continuar Partida Anterior" : "[Sem Partida Salva]",
+        "1 Jogador (vs Bot)",
+        "2 Jogadores",
+        "Modo Treino (Solo)",
+        "Opções do Jogo"
+    ];
+
+    ctx.font = "22px Arial";
+    ctx.textAlign = "left";
+    for (let i = 0; i < ops.length; i++) {
+        if (i === 0 && !temPartidaSalva) {
+            ctx.fillStyle = "#888888";
+        } else {
+            ctx.fillStyle = opcaoMenuModo === i ? "#FFFF00" : "#FFFFFF";
+        }
+        let prefixo = opcaoMenuModo === i ? "> " : "   ";
+        ctx.fillText(prefixo + ops[i], LARGURA / 2 - 180, 180 + (i * 45));
+    }
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "italic 14px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("Use W/S, SETAS ou MOUSE para navegar | ESPAÇO ou CLIQUE para confirmar", LARGURA / 2, 480);
+}
+
+function desenharMenuOpcoes() {
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 36px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("OPÇÕES DO JOGO", LARGURA / 2, 50);
+
+    const ops = [
+        "Dificuldade: < " + NOMES_DIFICULDADE[dificuldadeAtual] + " >",
+        "Cor Raquete J1: < " + NOMES_CORES[idxCorJ1] + " >",
+        "Cor Raquete J2 / Parede: < " + NOMES_CORES[idxCorJ2] + " >",
+        "Cor da Bolinha: < " + NOMES_CORES[idxCorBola] + " >",
+        "Tamanho Raquete: < " + NOMES_TAM_RAQUETE[idxTamRaquete] + " >",
+        "Tamanho Bola: < " + NOMES_TAM_BOLA[idxTamBola] + " >",
+        "Velocidade Raquete: < " + NOMES_VEL_RAQUETE[idxVelRaquete] + " >",
+        "Controle por Mouse: < " + NOMES_MODO_MOUSE[modoMouseAtual] + " >",
+        "Mapear J1 Subir: [ " + teclaJ1Cima + " ]",
+        "Mapear J1 Descer: [ " + teclaJ1Baixo + " ]",
+        "Mapear J2 Subir: [ " + teclaJ2Cima + " ]",
+        "Mapear J2 Descer: [ " + teclaJ2Baixo + " ]",
+        "Voltar"
+    ];
+
+    ctx.font = "14px Arial";
+    ctx.textAlign = "left";
+    for (let i = 0; i < ops.length; i++) {
+        ctx.fillStyle = opcaoMenuOpcoes === i ? "#FFFF00" : "#FFFFFF";
+        let prefixo = opcaoMenuOpcoes === i ? "> " : "   ";
+        ctx.fillText(prefixo + ops[i], 80, 85 + (i * 30));
+    }
+
+    // Amostras de cores
+    ctx.fillStyle = corJ1;
+    ctx.fillRect(560, 102 - 14, 18, 18);
+    ctx.fillStyle = corJ2;
+    ctx.fillRect(560, 132 - 14, 18, 18);
+    ctx.fillStyle = corBola;
+    ctx.beginPath();
+    ctx.arc(569, 162 - 5, 9, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (aguardandoReinstalaTecla) {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+        ctx.fillRect(150, 200, 500, 150);
+        ctx.strokeStyle = "#FFFF00";
+        ctx.strokeRect(150, 200, 500, 150);
+        ctx.fillStyle = "#FFFF00";
+        ctx.font = "bold 16px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("Pressione a nova tecla para: " + acaoMapeando, LARGURA / 2, 280);
+    }
+}
+
+function desenharMenuTipoJogo() {
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 40px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("Tipo de Partida", LARGURA / 2, 170);
+
+    const ops = ["Partida por Pontos", "Modo Infinito"];
+    ctx.font = "22px Arial";
+    ctx.textAlign = "left";
+    for (let i = 0; i < ops.length; i++) {
+        ctx.fillStyle = opcaoMenuTipoJogo === i ? "#FFFF00" : "#FFFFFF";
+        let prefixo = opcaoMenuTipoJogo === i ? "> " : "   ";
+        ctx.fillText(prefixo + ops[i], LARGURA / 2 - 120, 260 + (i * 60));
+    }
+}
+
+function desenharMenuMetaPontos() {
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 40px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("Meta de Pontos", LARGURA / 2, 130);
+
+    ctx.font = "20px Arial";
+    ctx.textAlign = "left";
+    for (let i = 0; i < OPCOES_PONTOS.length; i++) {
+        ctx.fillStyle = indiceOpcaoPontos === i ? "#FFFF00" : "#FFFFFF";
+        let prefixo = indiceOpcaoPontos === i ? "> " : "   ";
+        ctx.fillText(prefixo + OPCOES_PONTOS[i] + " Pontos", LARGURA / 2 - 80, 200 + (i * 45));
+    }
+}
+
+function desenharJogo() {
+    if (!modoTreino) {
+        ctx.fillStyle = "#FFFFFF";
+        for (let i = 0; i < ALTURA; i += 30) {
+            ctx.fillRect(LARGURA / 2 - 2, i, 4, 15);
+        }
+
+        ctx.fillStyle = corJ2;
+        ctx.fillRect(LARGURA - 30 - LARGURA_RAQUETE, j2Y, LARGURA_RAQUETE, alturaRaquete);
+    } else {
+        ctx.fillStyle = corJ2;
+        ctx.fillRect(LARGURA - 10, 0, 10, ALTURA);
+    }
+
+    ctx.fillStyle = corJ1;
+    ctx.fillRect(30, j1Y, LARGURA_RAQUETE, alturaRaquete);
+
+    ctx.fillStyle = corBola;
+    ctx.beginPath();
+    ctx.arc(bolaX + tamanhoBola / 2, bolaY + tamanhoBola / 2, tamanhoBola / 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 20px Arial";
+    ctx.textAlign = "left";
+
+    if (modoTreino) {
+        ctx.fillText("Rebates: " + rebatesTreinoAtual, 180, 60);
+        ctx.fillText("Recorde: " + recordeTreino, 500, 60);
+    } else {
+        ctx.fillText("Jogador 1: " + pontosJ1, 160, 60);
+        let nomeJ2 = modoBot ? "Bot: " : "Jogador 2: ";
+        ctx.fillText(nomeJ2 + pontosJ2, 500, 60);
+    }
+
+    if (bolaEsperandoInicio) {
+        ctx.fillStyle = "#FFFF00";
+        ctx.font = "bold 16px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("Pressione qualquer tecla ou clique com o mouse para iniciar!", LARGURA / 2, 120);
+    }
+}
+
+function desenharMenuPausa() {
+    ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+    ctx.fillRect(0, 0, LARGURA, ALTURA);
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 40px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("PAUSA", LARGURA / 2, 180);
+
+    const ops = ["Continuar Jogo", "Opções do Jogo", "Resetar Pontos", "Voltar ao Menu Principal"];
+    ctx.font = "22px Arial";
+    ctx.textAlign = "left";
+    for (let i = 0; i < ops.length; i++) {
+        ctx.fillStyle = opcaoMenuPausa === i ? "#FFFF00" : "#FFFFFF";
+        let prefixo = opcaoMenuPausa === i ? "> " : "   ";
+        ctx.fillText(prefixo + ops[i], LARGURA / 2 - 140, 250 + (i * 50));
+    }
+}
+
+function desenharFimDeJogo() {
+    ctx.fillStyle = "#FF0000";
+    ctx.font = "bold 40px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("FIM DE JOGO", LARGURA / 2, 220);
+
+    let vencedor = (pontosJ1 >= pontosParaVencer) ? "Jogador 1 Venceu!" : (modoBot ? "O Bot Venceu!" : "Jogador 2 Venceu!");
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 26px Arial";
+    ctx.fillText(vencedor, LARGURA / 2, 310);
+
+    ctx.font = "italic 16px Arial";
+    ctx.fillText("Pressione ESPAÇO, ESC ou CLIQUE para voltar ao Menu", LARGURA / 2, 410);
+}
+
+function aplicarDificuldade() {
+    switch (dificuldadeAtual) {
+        case Dificuldade.FACIL: velocidadeBolaBase = 3.0; velocidadeBot = 2; break;
+        case Dificuldade.MEDIO: velocidadeBolaBase = 5.0; velocidadeBot = 4; break;
+        case Dificuldade.DIFICIL: velocidadeBolaBase = 7.0; velocidadeBot = 6; break;
+        case Dificuldade.FRENESI: velocidadeBolaBase = 3.0; velocidadeBot = 6; break;
+    }
+    let velocidadeAntiga = velocidadeBolaAtual;
+    velocidadeBolaAtual = velocidadeBolaBase;
+
+    if (velocidadeAntiga !== 0) {
+        let fatorProporcao = velocidadeBolaAtual / velocidadeAntiga;
+        bolaXDir *= fatorProporcao;
+        bolaYDir *= fatorProporcao;
+    }
+}
+
+function aumentarVelocidadeFrenesi() {
+    if (dificuldadeAtual === Dificuldade.FRENESI && velocidadeBolaAtual < 14.0) {
+        velocidadeBolaAtual += 0.5;
+        let sinalX = bolaXDir > 0 ? 1 : -1;
+        let sinalY = bolaYDir > 0 ? 1 : -1;
+        bolaXDir = sinalX * velocidadeBolaAtual;
+        bolaYDir = sinalY * velocidadeBolaAtual;
+    }
+}
+
+function atualizar() {
+    if (estadoAtual !== EstadoJogo.JOGANDO) return;
+
+    // Movimento J1
+    if (modoMouseAtual === ModoMouse.PLAYER_1) {
+        j1Y = mousePos.y - (alturaRaquete / 2.0);
+    } else {
+        if (j1Cima) j1Y -= velocidadeRaquete;
+        if (j1Baixo) j1Y += velocidadeRaquete;
+    }
+
+    if (j1Y < 0) j1Y = 0;
+    if (j1Y > ALTURA - alturaRaquete) j1Y = ALTURA - alturaRaquete;
+
+    // Movimento J2 / Bot
+    if (!modoTreino) {
+        if (modoBot) {
+            if (bolaXDir > 0) {
+                let centroRaquete = j2Y + alturaRaquete / 2.0;
+                let centroBola = bolaY + tamanhoBola / 2.0;
+                if (centroRaquete < centroBola && j2Y < ALTURA - alturaRaquete) {
+                    j2Y += velocidadeBot;
+                } else if (centroRaquete > centroBola && j2Y > 0) {
+                    j2Y -= velocidadeBot;
+                }
+            }
+        } else {
+            if (modoMouseAtual === ModoMouse.PLAYER_2) {
+                j2Y = mousePos.y - (alturaRaquete / 2.0);
+            } else {
+                if (j2Cima) j2Y -= velocidadeRaquete;
+                if (j2Baixo) j2Y += velocidadeRaquete;
+            }
+        }
+
+        if (j2Y < 0) j2Y = 0;
+        if (j2Y > ALTURA - alturaRaquete) j2Y = ALTURA - alturaRaquete;
+    }
+
+    // Bola
+    if (!bolaEsperandoInicio) {
+        bolaX += bolaXDir;
+        bolaY += bolaYDir;
+
+        // Topo / Base
+        if (bolaY <= 0 || bolaY >= ALTURA - tamanhoBola) {
+            bolaYDir = -bolaYDir;
+        }
+
+        // Colisão J1
+        if (bolaX <= 30 + LARGURA_RAQUETE && bolaX >= 30) {
+            if (bolaY + tamanhoBola >= j1Y && bolaY <= j1Y + alturaRaquete) {
+                bolaXDir = Math.abs(bolaXDir);
+                bolaX = 30 + LARGURA_RAQUETE + 1;
+                aumentarVelocidadeFrenesi();
+                if (modoTreino) {
+                    rebatesTreinoAtual++;
+                    if (rebatesTreinoAtual > recordeTreino) recordeTreino = rebatesTreinoAtual;
+                }
+            }
+        }
+
+        // Colisão Direita (J2 / Parede)
+        if (modoTreino) {
+            if (bolaX + tamanhoBola >= LARGURA - 10) {
+                bolaXDir = -Math.abs(bolaXDir);
+                bolaX = LARGURA - 10 - tamanhoBola - 1;
+                aumentarVelocidadeFrenesi();
+            }
+        } else {
+            if (bolaX + tamanhoBola >= LARGURA - 30 - LARGURA_RAQUETE && bolaX + tamanhoBola <= LARGURA - 30) {
+                if (bolaY + tamanhoBola >= j2Y && bolaY <= j2Y + alturaRaquete) {
+                    bolaXDir = -Math.abs(bolaXDir);
+                    bolaX = LARGURA - 30 - LARGURA_RAQUETE - tamanhoBola - 1;
+                    aumentarVelocidadeFrenesi();
+                }
+            }
+        }
+
+        // Pontos
+        if (bolaX < 0) {
+            if (modoTreino) {
+                rebatesTreinoAtual = 0;
+            } else {
+                pontosJ2++;
+                verificarVitoria();
+            }
+            reiniciarBola();
+        } else if (bolaX > LARGURA && !modoTreino) {
+            pontosJ1++;
+            verificarVitoria();
+            reiniciarBola();
+        }
+    }
+}
+
+function verificarVitoria() {
+    if (tipoJogoAtual === TipoJogo.PONTOS_DEFINIDOS) {
+        if (pontosJ1 >= pontosParaVencer || pontosJ2 >= pontosParaVencer) {
+            estadoAtual = EstadoJogo.FIM_DE_JOGO;
+            temPartidaSalva = false;
+        }
+    }
+}
+
+function reiniciarBola() {
+    bolaX = LARGURA / 2.0 - tamanhoBola / 2.0;
+    bolaY = ALTURA / 2.0 - tamanhoBola / 2.0;
+    velocidadeBolaAtual = velocidadeBolaBase;
+
+    let angulo;
+    if (modoTreino) {
+        angulo = (Math.random() * Math.PI / 2.0) - (Math.PI / 4.0);
+    } else {
+        let paraDireita = Math.random() < 0.5;
+        let variacao = (Math.random() * Math.PI / 2.0) - (Math.PI / 4.0);
+        angulo = paraDireita ? variacao : Math.PI + variacao;
+    }
+
+    bolaXDir = velocidadeBolaAtual * Math.cos(angulo);
+    bolaYDir = velocidadeBolaAtual * Math.sin(angulo);
+
+    if (!modoBot) bolaEsperandoInicio = true;
+}
+
+function resetarPartida(zerarPontos) {
+    if (zerarPontos) {
+        pontosJ1 = 0;
+        pontosJ2 = 0;
+        rebatesTreinoAtual = 0;
+    }
+    j1Y = (ALTURA - alturaRaquete) / 2.0;
+    j2Y = (ALTURA - alturaRaquete) / 2.0;
+    j1Cima = j1Baixo = j2Cima = j2Baixo = false;
+
+    aplicarDificuldade();
+    reiniciarBola();
+
+    if (modoBot) bolaEsperandoInicio = false;
+    temPartidaSalva = true;
+}
+
+function alterarOpcaoOpcoes(direcao) {
+    switch (opcaoMenuOpcoes) {
+        case 0:
+            dificuldadeAtual = (dificuldadeAtual + direcao + 4) % 4;
+            aplicarDificuldade();
+            break;
+        case 1:
+            idxCorJ1 = (idxCorJ1 + direcao + CORES_DISPONIVEIS.length) % CORES_DISPONIVEIS.length;
+            corJ1 = CORES_DISPONIVEIS[idxCorJ1];
+            break;
+        case 2:
+            idxCorJ2 = (idxCorJ2 + direcao + CORES_DISPONIVEIS.length) % CORES_DISPONIVEIS.length;
+            corJ2 = CORES_DISPONIVEIS[idxCorJ2];
+            break;
+        case 3:
+            idxCorBola = (idxCorBola + direcao + CORES_DISPONIVEIS.length) % CORES_DISPONIVEIS.length;
+            corBola = CORES_DISPONIVEIS[idxCorBola];
+            break;
+        case 4:
+            idxTamRaquete = (idxTamRaquete + direcao + OPCOES_TAM_RAQUETE.length) % OPCOES_TAM_RAQUETE.length;
+            alturaRaquete = OPCOES_TAM_RAQUETE[idxTamRaquete];
+            break;
+        case 5:
+            idxTamBola = (idxTamBola + direcao + OPCOES_TAM_BOLA.length) % OPCOES_TAM_BOLA.length;
+            tamanhoBola = OPCOES_TAM_BOLA[idxTamBola];
+            break;
+        case 6:
+            idxVelRaquete = (idxVelRaquete + direcao + OPCOES_VEL_RAQUETE.length) % OPCOES_VEL_RAQUETE.length;
+            velocidadeRaquete = OPCOES_VEL_RAQUETE[idxVelRaquete];
+            break;
+        case 7:
+            modoMouseAtual = (modoMouseAtual + direcao + 3) % 3;
+            break;
+        case 8: aguardandoReinstalaTecla = true; acaoMapeando = "J1 Subir"; break;
+        case 9: aguardandoReinstalaTecla = true; acaoMapeando = "J1 Descer"; break;
+        case 10: aguardandoReinstalaTecla = true; acaoMapeando = "J2 Subir"; break;
+        case 11: aguardandoReinstalaTecla = true; acaoMapeando = "J2 Descer"; break;
+        case 12: estadoAtual = estadoAnteriorOpcoes; break;
+    }
+}
+
+// Controles Teclado
+window.addEventListener('keydown', (e) => {
+    if (aguardandoReinstalaTecla) {
+        if (acaoMapeando === "J1 Subir") teclaJ1Cima = e.code;
+        else if (acaoMapeando === "J1 Descer") teclaJ1Baixo = e.code;
+        else if (acaoMapeando === "J2 Subir") teclaJ2Cima = e.code;
+        else if (acaoMapeando === "J2 Descer") teclaJ2Baixo = e.code;
+
+        aguardandoReinstalaTecla = false;
+        return;
+    }
+
+    if (estadoAtual === EstadoJogo.MENU_MODO) {
+        if (e.code === "KeyW" || e.code === "ArrowUp") opcaoMenuModo = (opcaoMenuModo - 1 + 5) % 5;
+        else if (e.code === "KeyS" || e.code === "ArrowDown") opcaoMenuModo = (opcaoMenuModo + 1) % 5;
+        else if (e.code === "Space" || e.code === "Enter") confirmarMenuModo();
+    } 
+    else if (estadoAtual === EstadoJogo.MENU_TIPO_JOGO) {
+        if (e.code === "KeyW" || e.code === "ArrowUp") opcaoMenuTipoJogo = (opcaoMenuTipoJogo - 1 + 2) % 2;
+        else if (e.code === "KeyS" || e.code === "ArrowDown") opcaoMenuTipoJogo = (opcaoMenuTipoJogo + 1) % 2;
+        else if (e.code === "Space" || e.code === "Enter") confirmarMenuTipoJogo();
+        else if (e.code === "Escape") estadoAtual = EstadoJogo.MENU_MODO;
+    } 
+    else if (estadoAtual === EstadoJogo.MENU_META_PONTOS) {
+        if (e.code === "KeyW" || e.code === "ArrowUp") indiceOpcaoPontos = (indiceOpcaoPontos - 1 + OPCOES_PONTOS.length) % OPCOES_PONTOS.length;
+        else if (e.code === "KeyS" || e.code === "ArrowDown") indiceOpcaoPontos = (indiceOpcaoPontos + 1) % OPCOES_PONTOS.length;
+        else if (e.code === "Space" || e.code === "Enter") confirmarMenuMetaPontos();
+        else if (e.code === "Escape") estadoAtual = EstadoJogo.MENU_TIPO_JOGO;
+    } 
+    else if (estadoAtual === EstadoJogo.MENU_OPCOES) {
+        if (e.code === "KeyW" || e.code === "ArrowUp") opcaoMenuOpcoes = (opcaoMenuOpcoes - 1 + 13) % 13;
+        else if (e.code === "KeyS" || e.code === "ArrowDown") opcaoMenuOpcoes = (opcaoMenuOpcoes + 1) % 13;
+        else if (e.code === "KeyD" || e.code === "ArrowRight") alterarOpcaoOpcoes(1);
+        else if (e.code === "KeyA" || e.code === "ArrowLeft") alterarOpcaoOpcoes(-1);
+        else if (e.code === "Space" || e.code === "Enter") alterarOpcaoOpcoes(1);
+        else if (e.code === "Escape") estadoAtual = estadoAnteriorOpcoes;
+    } 
+    else if (estadoAtual === EstadoJogo.JOGANDO) {
+        if (e.code === "Escape") {
+            opcaoMenuPausa = 0;
+            estadoAtual = EstadoJogo.PAUSADO;
+            return;
+        }
+        if (bolaEsperandoInicio) bolaEsperandoInicio = false;
+
+        if (e.code === teclaJ1Cima) j1Cima = true;
+        if (e.code === teclaJ1Baixo) j1Baixo = true;
+        if (!modoBot && !modoTreino) {
+            if (e.code === teclaJ2Cima) j2Cima = true;
+            if (e.code === teclaJ2Baixo) j2Baixo = true;
+        }
+    } 
+    else if (estadoAtual === EstadoJogo.PAUSADO) {
+        if (e.code === "KeyW" || e.code === "ArrowUp") opcaoMenuPausa = (opcaoMenuPausa - 1 + 4) % 4;
+        else if (e.code === "KeyS" || e.code === "ArrowDown") opcaoMenuPausa = (opcaoMenuPausa + 1) % 4;
+        else if (e.code === "Space" || e.code === "Enter") confirmarMenuPausa();
+        else if (e.code === "Escape") estadoAtual = EstadoJogo.JOGANDO;
+    } 
+    else if (estadoAtual === EstadoJogo.FIM_DE_JOGO) {
+        if (e.code === "Space" || e.code === "Enter" || e.code === "Escape") {
+            estadoAtual = EstadoJogo.MENU_MODO;
+        }
+    }
+});
+
+window.addEventListener('keyup', (e) => {
+    if (e.code === teclaJ1Cima) j1Cima = false;
+    if (e.code === teclaJ1Baixo) j1Baixo = false;
+    if (e.code === teclaJ2Cima) j2Cima = false;
+    if (e.code === teclaJ2Baixo) j2Baixo = false;
+});
+
+// Ações de Confirmação
+function confirmarMenuModo() {
+    if (opcaoMenuModo === 0 && temPartidaSalva) {
+        estadoAtual = EstadoJogo.JOGANDO;
+    } else if (opcaoMenuModo === 4) {
+        estadoAnteriorOpcoes = EstadoJogo.MENU_MODO;
+        estadoAtual = EstadoJogo.MENU_OPCOES;
+    } else if (opcaoMenuModo > 0) {
+        modoBot = opcaoMenuModo === 1;
+        modoTreino = opcaoMenuModo === 3;
+        if (modoTreino) {
+            resetarPartida(true);
+            estadoAtual = EstadoJogo.JOGANDO;
+        } else {
+            estadoAtual = EstadoJogo.MENU_TIPO_JOGO;
+        }
+    }
+}
+
+function confirmarMenuTipoJogo() {
+    tipoJogoAtual = opcaoMenuTipoJogo === 0 ? TipoJogo.PONTOS_DEFINIDOS : TipoJogo.INFINITO;
+    if (tipoJogoAtual === TipoJogo.PONTOS_DEFINIDOS) {
+        estadoAtual = EstadoJogo.MENU_META_PONTOS;
+    } else {
+        resetarPartida(true);
+        estadoAtual = EstadoJogo.JOGANDO;
+    }
+}
+
+function confirmarMenuMetaPontos() {
+    pontosParaVencer = OPCOES_PONTOS[indiceOpcaoPontos];
+    resetarPartida(true);
+    estadoAtual = EstadoJogo.JOGANDO;
+}
+
+function confirmarMenuPausa() {
+    if (opcaoMenuPausa === 0) estadoAtual = EstadoJogo.JOGANDO;
+    else if (opcaoMenuPausa === 1) {
+        estadoAnteriorOpcoes = EstadoJogo.PAUSADO;
+        estadoAtual = EstadoJogo.MENU_OPCOES;
+    } else if (opcaoMenuPausa === 2) {
+        resetarPartida(true);
+        estadoAtual = EstadoJogo.JOGANDO;
+    } else if (opcaoMenuPausa === 3) estadoAtual = EstadoJogo.MENU_MODO;
+}
+
+// Mouse Eventos
+canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    mousePos.x = e.clientX - rect.left;
+    mousePos.y = e.clientY - rect.top;
+
+    let mouseY = mousePos.y;
+
+    if (estadoAtual === EstadoJogo.MENU_MODO) {
+        for (let i = 0; i < 5; i++) {
+            let topY = 155 + (i * 45);
+            if (mouseY >= topY && mouseY <= topY + 35) {
+                opcaoMenuModo = i;
+                break;
+            }
+        }
+    } else if (estadoAtual === EstadoJogo.MENU_TIPO_JOGO) {
+        for (let i = 0; i < 2; i++) {
+            let topY = 235 + (i * 60);
+            if (mouseY >= topY && mouseY <= topY + 45) {
+                opcaoMenuTipoJogo = i;
+                break;
+            }
+        }
+    } else if (estadoAtual === EstadoJogo.MENU_META_PONTOS) {
+        for (let i = 0; i < OPCOES_PONTOS.length; i++) {
+            let topY = 175 + (i * 45);
+            if (mouseY >= topY && mouseY <= topY + 35) {
+                indiceOpcaoPontos = i;
+                break;
+            }
+        }
+    } else if (estadoAtual === EstadoJogo.MENU_OPCOES) {
+        for (let i = 0; i < 13; i++) {
+            let topY = 65 + (i * 30);
+            if (mouseY >= topY && mouseY <= topY + 25) {
+                opcaoMenuOpcoes = i;
+                break;
+            }
+        }
+    } else if (estadoAtual === EstadoJogo.PAUSADO) {
+        for (let i = 0; i < 4; i++) {
+            let topY = 225 + (i * 50);
+            if (mouseY >= topY && mouseY <= topY + 40) {
+                opcaoMenuPausa = i;
+                break;
+            }
+        }
+    }
+});
+
+canvas.addEventListener('mousedown', (e) => {
+    if (estadoAtual === EstadoJogo.JOGANDO) {
+        if (bolaEsperandoInicio) bolaEsperandoInicio = false;
+    } else if (estadoAtual === EstadoJogo.MENU_MODO) {
+        confirmarMenuModo();
+    } else if (estadoAtual === EstadoJogo.MENU_TIPO_JOGO) {
+        confirmarMenuTipoJogo();
+    } else if (estadoAtual === EstadoJogo.MENU_META_PONTOS) {
+        confirmarMenuMetaPontos();
+    } else if (estadoAtual === EstadoJogo.MENU_OPCOES) {
+        alterarOpcaoOpcoes(1);
+    } else if (estadoAtual === EstadoJogo.PAUSADO) {
+        confirmarMenuPausa();
+    } else if (estadoAtual === EstadoJogo.FIM_DE_JOGO) {
+        estadoAtual = EstadoJogo.MENU_MODO;
+    }
+});
+
+// Inicia a aplicação
+gameLoop();
+</script>
+
+</body>
+</html>
