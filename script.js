@@ -193,13 +193,11 @@ if (socket) {
         codigoSalaOnline = data.roomId;
         meuNumeroJogador = data.playerNum;
         
-        // Oculta outros cartões e exibe a tela de espera
         ocultarTodasOverlays();
         multiplayerUI.classList.remove('hidden');
         cardWaitingRoom.classList.remove('hidden');
         uiRoomCode.innerText = data.roomId;
         
-        // Mantém o estado no menu para não rodar a física da partida antes da hora
         estadoAtual = EstadoJogo.MENU_ONLINE;
     });
 
@@ -210,15 +208,10 @@ if (socket) {
     });
 
     socket.on('gameStart', (data) => {
-        // Esconde todas as overlays de UI
         ocultarTodasOverlays();
-        
-        // Configura o estado inicial do jogo
         j1Y = data.j1Y;
         j2Y = data.j2Y;
         resetarPartida(true);
-        
-        // Inicia a partida efetivamente para ambos os jogadores
         estadoAtual = EstadoJogo.JOGANDO;
     });
 
@@ -327,7 +320,6 @@ btnBackFromJoin.addEventListener('click', () => {
     estadoAtual = EstadoJogo.MENU_MODO;
 });
 
-// Animação de Agitação da Tela (Screen Shake)
 function addScreenShake(amount) { shakeIntensity = amount; }
 
 function applyScreenShake() {
@@ -342,7 +334,6 @@ function applyScreenShake() {
     }
 }
 
-// Game Loop Principal
 function gameLoop() {
     atualizar();
     desenhar();
@@ -965,7 +956,6 @@ canvas.addEventListener('mousemove', (e) => {
     mousePos.y = e.clientY - rect.top;
 });
 
-// Suporte para Tela Cheia / Clique
 canvas.addEventListener('click', () => {
     sounds.init();
     if (estadoAtual === EstadoJogo.JOGANDO && bolaEsperandoInicio) {
@@ -976,8 +966,5 @@ canvas.addEventListener('click', () => {
     }
 });
 
-// Inicialização da Partida
 resetarPartida(true);
-
-// Início do Loop
 requestAnimationFrame(gameLoop);

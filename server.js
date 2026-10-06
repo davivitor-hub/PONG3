@@ -1,4 +1,3 @@
-
 const express = require('express');
 const http = require('http');
 const path = require('path');
@@ -8,6 +7,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+// Servir arquivos estáticos da pasta 'public'
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/join/:roomId', (req, res) => {
@@ -41,71 +41,37 @@ io.on('connection', (socket) => {
     socket.emit('publicRoomsList', getPublicRoomsList());
   });
 
-  // Criar Sala (Pública ou Privada com Código Personalizado ou Automático)
-  // Substitua o trecho de 'createRoom' e 'joinRoom' no server.js:
+  // Criar Sala
+  socket.on('createRoom', (data) => {
+    let roomId = data?.customCode ? data.customCode.toString().trim().toUpperCase() : generateRoomId();
+    const isPublic = data?.isPublic ?? true;
+    const roomName = data?.roomName || `Sala de ${roomId}`;
 
-socket.on('createRoom', (data) => {
-  let roomId = data?.customCode ? data.customCode.toString().trim().toUpperCase() : generateRoomId();
-  const isPublic = data?.isPublic ?? true;
-  const roomName = data?.roomName || `Sala de ${roomId}`;
+    if (rooms[roomId]) {
+      socket.emit('roomError', 'Este código/sala já existe! Escolha outro código.');
+      return;
+    }
 
-  if (rooms[roomId]) {
-    socket.emit('roomError', 'Este código/sala já existe! Escolha outro código.');
-    return;
-  }
+    rooms[roomId] = {
+      id: roomId,
+      name: roomName,
+      isPublic: isPublic,
+      players: [socket.id],
+      j1Y: 250,
+      j2Y: 250,
+      pontosJ1: 0,
+      pontosJ2: 0,
+      bola: { x: 400, y: 300, vx: 7, vy: 7 },
+      gameStarted: false
+    };
 
-  rooms[roomId] = {
-    id: roomId,
-    name: roomName,
-    isPublic: isPublic,
-    players: [socket.id],
-    j1Y: 250,
-    j2Y: 250,
-    pontosJ1: 0,
-    pontosJ2: 0,
-    bola: { x: 400, y: 300, vx: 7, vy: 7 },
-    gameStarted: false
-  };
+    socket.join(roomId);
+    socket.roomId = roomId;
+    socket.playerNum = 1;
 
-  socket.join(roomId);
-  socket.roomId = roomId;
-  socket.playerNum = 1;
-
-  // Notifica o criador que a sala foi criada e aguarda o segundo jogador
-  socket.emit('roomCreated', { roomId, playerNum: 1, isPublic });
-  io.emit('publicRoomsList', getPublicRoomsList());
-});
-
-socket.on('joinRoom', (roomId) => {
-  const cleanRoomId = roomId ? roomId.toString().trim().toUpperCase() : '';
-  const room = rooms[cleanRoomId];
-
-  if (!room) {
-    socket.emit('roomError', 'Sala não encontrada!');
-    return;
-  }
-  if (room.players.length >= 2) {
-    socket.emit('roomError', 'Esta sala já está cheia!');
-    return;
-  }
-
-  room.players.push(socket.id);
-  socket.join(cleanRoomId);
-  socket.roomId = cleanRoomId;
-  socket.playerNum = 2;
-
-  socket.emit('roomJoined', { roomId: cleanRoomId, playerNum: 2 });
-  
-  // Quando o segundo jogador entra, ambos são informados para iniciar a partida
-  room.gameStarted = true;
-  io.to(cleanRoomId).emit('gameStart', {
-    j1Y: room.j1Y,
-    j2Y: room.j2Y,
-    bola: room.bola
+    socket.emit('roomCreated', { roomId, playerNum: 1, isPublic });
+    io.emit('publicRoomsList', getPublicRoomsList());
   });
-
-  io.emit('publicRoomsList', getPublicRoomsList());
-});
 
   // Entrar em uma Sala por Código ou Seleção na Lista
   socket.on('joinRoom', (roomId) => {
@@ -127,6 +93,9 @@ socket.on('joinRoom', (roomId) => {
     socket.playerNum = 2;
 
     socket.emit('roomJoined', { roomId: cleanRoomId, playerNum: 2 });
+    
+    // Inicia a partida quando o segundo jogador conecta
+    room.gameStarted = true;
     io.to(cleanRoomId).emit('gameStart', {
       j1Y: room.j1Y,
       j2Y: room.j2Y,
@@ -175,5 +144,5 @@ socket.on('joinRoom', (roomId) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(` Servidor rodando em http://localhost:${PORT}`);
+  console.log(`Servidor rodando na porta ${PORT}`);
 });

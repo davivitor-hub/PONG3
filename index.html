@@ -20,7 +20,7 @@
             <h2>CRIAR SALA MULTIPLAYER</h2>
             <div class="form-group">
                 <label for="inputCustomCode">Código da Sala (Opcional - ex: SOMBRA):</label>
-                <input type="text" id="inputCustomCode" maxlength="8" placeholder="Auto-gerado se vazio" uppercase>
+                <input type="text" id="inputCustomCode" maxlength="8" placeholder="Auto-gerado se vazio">
             </div>
             <div class="form-group checkbox-group">
                 <input type="checkbox" id="checkIsPublic" checked>
@@ -39,7 +39,7 @@
             <p class="status-text" id="uiStatusText">Aguardando o Jogador 2 conectar...</p>
             <div class="btn-group">
                 <button id="btnCopyCode" class="glow-btn">Copiar Código</button>
-                <button id="btnCopyLink" class="glow-btn">Copiar Link Directo</button>
+                <button id="btnCopyLink" class="glow-btn">Copiar Link Direto</button>
             </div>
             <button id="btnCancelRoom" class="glow-btn cancel-btn">Sair da Sala</button>
         </div>
@@ -71,7 +71,8 @@
     </div>
 </div>
 
-<script src="pongs/server.js"></script>
+<!-- Biblioteca oficial do Socket.io fornecida pelo servidor -->
+<script src="/socket.io/socket.io.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
