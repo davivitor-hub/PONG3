@@ -96,7 +96,7 @@ let indiceOpcaoPontos = 1;
 let pontosParaVencer = 5;
 
 // Seleções dos Menus
-let opcaoMenuModo = 0;       // 0 a 6
+let opcaoMenuModo = 0;
 let opcaoMenuTipoJogo = 0;
 let opcaoMenuOpcoes = 0;
 let opcaoMenuPausa = 0;
@@ -192,10 +192,15 @@ if (socket) {
     socket.on('roomCreated', (data) => {
         codigoSalaOnline = data.roomId;
         meuNumeroJogador = data.playerNum;
+        
+        // Oculta outros cartões e exibe a tela de espera
         ocultarTodasOverlays();
         multiplayerUI.classList.remove('hidden');
         cardWaitingRoom.classList.remove('hidden');
         uiRoomCode.innerText = data.roomId;
+        
+        // Mantém o estado no menu para não rodar a física da partida antes da hora
+        estadoAtual = EstadoJogo.MENU_ONLINE;
     });
 
     socket.on('roomJoined', (data) => {
@@ -205,10 +210,15 @@ if (socket) {
     });
 
     socket.on('gameStart', (data) => {
+        // Esconde todas as overlays de UI
         ocultarTodasOverlays();
+        
+        // Configura o estado inicial do jogo
         j1Y = data.j1Y;
         j2Y = data.j2Y;
         resetarPartida(true);
+        
+        // Inicia a partida efetivamente para ambos os jogadores
         estadoAtual = EstadoJogo.JOGANDO;
     });
 
@@ -668,7 +678,7 @@ function atualizar() {
                     j2Y = mousePos.y - (alturaRaquete / 2.0);
                 } else {
                     if (j2Cima) j2Y -= velocidadeRaquete;
-                    if (j2Baixo) j2Y += velocidadeRaquete;
+                    if (j2Baixo) j2Baixo += velocidadeRaquete;
                 }
             }
 
@@ -871,43 +881,54 @@ window.addEventListener('keyup', (e) => {
 // Ações de Confirmação dos Menus
 function confirmarMenuModo() {
     sounds.menuSelect();
-    
-    // Continuar Partida Salva
-    if (opcaoMenuModo === 0 && temPartidaSalva) {
-        estadoAtual = EstadoJogo.JOGANDO;
-    } 
-    // Criar Sala Online Diretamente
-    else if (opcaoMenuModo === 3) {
-        abrirCriarSala();
-    }
-    // Entrar no Lobby / Buscar Salas Públicas
-    else if (opcaoMenuModo === 4) {
-        abrirLobbyOnline();
-    }
-    // Configurações / Opções
-    else if (opcaoMenuModo === 6) {
-        estadoAnteriorOpcoes = EstadoJogo.MENU_MODO;
-        estadoAtual = EstadoJogo.MENU_OPCOES;
-    } 
-    // Modos Locais (Vs Bot, 2P, Treino)
-    else if (opcaoMenuModo > 0) {
-        modoOnline = false;
-        modoBot = opcaoMenuModo === 1;
-        modoTreino = opcaoMenuModo === 5;
-        if (modoTreino) { 
-            resetarPartida(true); 
-            estadoAtual = EstadoJogo.JOGANDO; 
-        } else { 
-            estadoAtual = EstadoJogo.MENU_TIPO_JOGO; 
-        }
+    switch (opcaoMenuModo) {
+        case 0:
+            if (temPartidaSalva) {
+                estadoAtual = EstadoJogo.JOGANDO;
+            }
+            break;
+        case 1:
+            modoBot = true;
+            modoTreino = false;
+            modoOnline = false;
+            estadoAtual = EstadoJogo.MENU_TIPO_JOGO;
+            break;
+        case 2:
+            modoBot = false;
+            modoTreino = false;
+            modoOnline = false;
+            estadoAtual = EstadoJogo.MENU_TIPO_JOGO;
+            break;
+        case 3:
+            abrirCriarSala();
+            break;
+        case 4:
+            abrirLobbyOnline();
+            break;
+        case 5:
+            modoBot = false;
+            modoTreino = true;
+            modoOnline = false;
+            resetarPartida(true);
+            estadoAtual = EstadoJogo.JOGANDO;
+            break;
+        case 6:
+            estadoAnteriorOpcoes = EstadoJogo.MENU_MODO;
+            estadoAtual = EstadoJogo.MENU_OPCOES;
+            break;
     }
 }
 
 function confirmarMenuTipoJogo() {
     sounds.menuSelect();
-    tipoJogoAtual = opcaoMenuTipoJogo === 0 ? TipoJogo.PONTOS_DEFINIDOS : TipoJogo.INFINITO;
-    if (tipoJogoAtual === TipoJogo.PONTOS_DEFINIDOS) estadoAtual = EstadoJogo.MENU_META_PONTOS;
-    else { resetarPartida(true); estadoAtual = EstadoJogo.JOGANDO; }
+    if (opcaoMenuTipoJogo === 0) {
+        tipoJogoAtual = TipoJogo.PONTOS_DEFINIDOS;
+        estadoAtual = EstadoJogo.MENU_META_PONTOS;
+    } else {
+        tipoJogoAtual = TipoJogo.INFINITO;
+        resetarPartida(true);
+        estadoAtual = EstadoJogo.JOGANDO;
+    }
 }
 
 function confirmarMenuMetaPontos() {
@@ -919,36 +940,44 @@ function confirmarMenuMetaPontos() {
 
 function confirmarMenuPausa() {
     sounds.menuSelect();
-    if (opcaoMenuPausa === 0) estadoAtual = EstadoJogo.JOGANDO;
-    else if (opcaoMenuPausa === 1) { estadoAnteriorOpcoes = EstadoJogo.PAUSADO; estadoAtual = EstadoJogo.MENU_OPCOES; }
-    else if (opcaoMenuPausa === 2) { resetarPartida(true); estadoAtual = EstadoJogo.JOGANDO; }
-    else if (opcaoMenuPausa === 3) { modoOnline = false; estadoAtual = EstadoJogo.MENU_MODO; }
+    switch (opcaoMenuPausa) {
+        case 0:
+            estadoAtual = EstadoJogo.JOGANDO;
+            break;
+        case 1:
+            estadoAnteriorOpcoes = EstadoJogo.PAUSADO;
+            estadoAtual = EstadoJogo.MENU_OPCOES;
+            break;
+        case 2:
+            resetarPartida(true);
+            estadoAtual = EstadoJogo.JOGANDO;
+            break;
+        case 3:
+            estadoAtual = EstadoJogo.MENU_MODO;
+            break;
+    }
 }
 
-// Navegação do Rato no Canvas
+// Captura do Movimento do Mouse
 canvas.addEventListener('mousemove', (e) => {
     const rect = canvas.getBoundingClientRect();
     mousePos.x = e.clientX - rect.left;
     mousePos.y = e.clientY - rect.top;
+});
 
-    let y = mousePos.y;
-    if (estadoAtual === EstadoJogo.MENU_MODO) {
-        for (let i = 0; i < 7; i++) {
-            let itemY = 170 + (i * 42);
-            if (y >= itemY - 18 && y <= itemY + 18) opcaoMenuModo = i;
-        }
+// Suporte para Tela Cheia / Clique
+canvas.addEventListener('click', () => {
+    sounds.init();
+    if (estadoAtual === EstadoJogo.JOGANDO && bolaEsperandoInicio) {
+        bolaEsperandoInicio = false;
+    } else if (estadoAtual === EstadoJogo.FIM_DE_JOGO) {
+        modoOnline = false;
+        estadoAtual = EstadoJogo.MENU_MODO;
     }
 });
 
-canvas.addEventListener('mousedown', () => {
-    sounds.init();
-    if (estadoAtual === EstadoJogo.JOGANDO && bolaEsperandoInicio) bolaEsperandoInicio = false;
-    else if (estadoAtual === EstadoJogo.MENU_MODO) confirmarMenuModo();
-    else if (estadoAtual === EstadoJogo.MENU_TIPO_JOGO) confirmarMenuTipoJogo();
-    else if (estadoAtual === EstadoJogo.MENU_META_PONTOS) confirmarMenuMetaPontos();
-    else if (estadoAtual === EstadoJogo.PAUSADO) confirmarMenuPausa();
-    else if (estadoAtual === EstadoJogo.FIM_DE_JOGO) { modoOnline = false; estadoAtual = EstadoJogo.MENU_MODO; }
-});
+// Inicialização da Partida
+resetarPartida(true);
 
-// Inicia o Loop do Jogo
-gameLoop();
+// Início do Loop
+requestAnimationFrame(gameLoop);
