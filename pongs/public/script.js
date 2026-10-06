@@ -2,6 +2,15 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const container = document.getElementById('canvasContainer');
 
+// Elementos da UI do Multiplayer
+const multiplayerUI = document.getElementById('multiplayerUI');
+const uiRoomTitle = document.getElementById('uiRoomTitle');
+const uiRoomCode = document.getElementById('uiRoomCode');
+const uiStatusText = document.getElementById('uiStatusText');
+const btnCopyCode = document.getElementById('btnCopyCode');
+const btnCopyLink = document.getElementById('btnCopyLink');
+const btnCancelRoom = document.getElementById('btnCancelRoom');
+
 const socket = typeof io !== 'undefined' ? io() : null;
 
 const LARGURA = 800;
@@ -9,9 +18,7 @@ const ALTURA = 600;
 
 // Sistema de Som usando Web Audio API
 class SoundFX {
-    constructor() {
-        this.ctx = null;
-    }
+    constructor() { this.ctx = null; }
 
     init() {
         if (!this.ctx) {
@@ -66,7 +73,7 @@ let estadoAnteriorOpcoes = EstadoJogo.MENU_MODO;
 let modoBot = false;
 let modoTreino = false;
 let modoOnline = false;
-let meuNumeroJogador = 1; // 1 ou 2 no modo online
+let meuNumeroJogador = 1;
 let codigoSalaOnline = "";
 let codigoDigitadoSala = "";
 let mensagemErroOnline = "";
@@ -153,20 +160,42 @@ for (let i = 0; i < 40; i++) {
     });
 }
 
+// Verifica se entrou via URL (/join/CODIGO ou ?room=CODIGO)
+function verificarParametrosURL() {
+    const pathParts = window.location.pathname.split('/');
+    let codeFromURL = "";
+
+    if (pathParts[1] === 'join' && pathParts[2]) {
+        codeFromURL = pathParts[2];
+    } else {
+        const urlParams = new URLSearchParams(window.location.search);
+        codeFromURL = urlParams.get('room');
+    }
+
+    if (codeFromURL && codeFromURL.length === 6 && socket) {
+        modoOnline = true;
+        codigoDigitadoSala = codeFromURL;
+        socket.emit('joinRoom', codeFromURL);
+    }
+}
+
 // Configuração de Eventos do Socket.io
 if (socket) {
     socket.on('roomCreated', (data) => {
         codigoSalaOnline = data.roomId;
         meuNumeroJogador = data.playerNum;
         estadoAtual = EstadoJogo.AGUARDANDO_JOGADOR;
+        exibirOverlayMultiplayer(true, data.roomId);
     });
 
     socket.on('roomJoined', (data) => {
         codigoSalaOnline = data.roomId;
         meuNumeroJogador = data.playerNum;
+        exibirOverlayMultiplayer(false);
     });
 
     socket.on('gameStart', (data) => {
+        exibirOverlayMultiplayer(false);
         j1Y = data.j1Y;
         j2Y = data.j2Y;
         resetarPartida(true);
@@ -175,6 +204,7 @@ if (socket) {
 
     socket.on('roomError', (msg) => {
         mensagemErroOnline = msg;
+        exibirOverlayMultiplayer(false);
     });
 
     socket.on('opponentMoved', (data) => {
@@ -197,15 +227,47 @@ if (socket) {
     socket.on('playerDisconnected', () => {
         if (estadoAtual === EstadoJogo.JOGANDO || estadoAtual === EstadoJogo.AGUARDANDO_JOGADOR) {
             alert('O outro jogador se desconectou.');
+            exibirOverlayMultiplayer(false);
             modoOnline = false;
             estadoAtual = EstadoJogo.MENU_MODO;
         }
     });
+
+    verificarParametrosURL();
 }
 
-function addScreenShake(amount) {
-    shakeIntensity = amount;
+// Interface de Copiar Link/Código
+function exibirOverlayMultiplayer(exibir, codigo = "") {
+    if (exibir) {
+        uiRoomCode.innerText = codigo;
+        multiplayerUI.classList.remove('hidden');
+    } else {
+        multiplayerUI.classList.add('hidden');
+    }
 }
+
+btnCopyCode.addEventListener('click', () => {
+    navigator.clipboard.writeText(codigoSalaOnline).then(() => {
+        btnCopyCode.innerText = "Copiado!";
+        setTimeout(() => btnCopyCode.innerText = "Copiar Código", 2000);
+    });
+});
+
+btnCopyLink.addEventListener('click', () => {
+    const link = `${window.location.origin}/join/${codigoSalaOnline}`;
+    navigator.clipboard.writeText(link).then(() => {
+        btnCopyLink.innerText = "Link Copiado!";
+        setTimeout(() => btnCopyLink.innerText = "Copiar Link Directo", 2000);
+    });
+});
+
+btnCancelRoom.addEventListener('click', () => {
+    exibirOverlayMultiplayer(false);
+    modoOnline = false;
+    estadoAtual = EstadoJogo.MENU_ONLINE;
+});
+
+function addScreenShake(amount) { shakeIntensity = amount; }
 
 function applyScreenShake() {
     if (shakeIntensity > 0) {
@@ -231,12 +293,10 @@ function criarParticulas(x, y, cor, qtd = 15) {
         let angulo = Math.random() * Math.PI * 2;
         let vel = Math.random() * 5 + 2;
         particulas.push({
-            x: x,
-            y: y,
+            x: x, y: y,
             vx: Math.cos(angulo) * vel,
             vy: Math.sin(angulo) * vel,
-            cor: cor,
-            vida: 1.0,
+            cor: cor, vida: 1.0,
             tamanho: Math.random() * 4 + 2
         });
     }
@@ -286,7 +346,7 @@ function desenhar() {
         case EstadoJogo.MENU_ONLINE: desenharMenuOnline(); break;
         case EstadoJogo.CRIAR_SALA: desenharCriarSala(); break;
         case EstadoJogo.ENTRAR_SALA: desenharEntrarSala(); break;
-        case EstadoJogo.AGUARDANDO_JOGADOR: desenharAguardandoJogador(); break;
+        case EstadoJogo.AGUARDANDO_JOGADOR: break;
         case EstadoJogo.JOGANDO: desenharJogo(); break;
         case EstadoJogo.PAUSADO:
             desenharJogo();
@@ -344,15 +404,8 @@ function desenharMenuOnline() {
 
 function desenharCriarSala() {
     desenharTextoGlow("CRIAR SALA ONLINE", LARGURA / 2, 180, "#00F0FF", 36);
-    desenharTextoGlow("PRESSIONE ENTER OU CLIQUE PARA GERAR CÓDIGO", LARGURA / 2, 300, "#FFFFFF", 16);
+    desenharTextoGlow("PRESSIONE ENTER OU CLIQUE PARA GERAR A SALA", LARGURA / 2, 300, "#FFFFFF", 16);
     desenharTextoGlow("[ ESC PARA VOLTAR ]", LARGURA / 2, 420, "#FFE600", 14);
-}
-
-function desenharAguardandoJogador() {
-    desenharTextoGlow("SALA CRIADA COM SUCESSO!", LARGURA / 2, 160, "#39FF14", 32);
-    desenharTextoGlow("CÓDIGO DA SALA:", LARGURA / 2, 240, "#FFFFFF", 20);
-    desenharTextoGlow(codigoSalaOnline, LARGURA / 2, 310, "#FF007F", 52, "center", 30);
-    desenharTextoGlow("AGUARDANDO JOGADOR 2 CONECTAR...", LARGURA / 2, 400, "#00F0FF", 18);
 }
 
 function desenharEntrarSala() {
@@ -598,15 +651,12 @@ function atualizar() {
     if (estadoAtual !== EstadoJogo.JOGANDO) return;
 
     if (modoOnline) {
-        // Controle da Raquete Local no Modo Online
         let posicaoAtualY = meuNumeroJogador === 1 ? j1Y : j2Y;
         let proximaY = posicaoAtualY;
 
         if (mouseAtivo && jogadorMouse === meuNumeroJogador) {
             proximaY = mousePos.y - (alturaRaquete / 2.0);
         } else {
-            let teclaSubir = meuNumeroJogador === 1 ? teclaJ1Cima : teclaJ2Cima;
-            let teclaDescer = meuNumeroJogador === 1 ? teclaJ1Baixo : teclaJ2Baixo;
             let pressionouSubir = meuNumeroJogador === 1 ? j1Cima : j2Cima;
             let pressionouDescer = meuNumeroJogador === 1 ? j1Baixo : j2Baixo;
 
@@ -624,10 +674,8 @@ function atualizar() {
             if (socket) socket.emit('movePaddle', proximaY);
         }
 
-        // Apenas o Jogador 1 (Host) executa a simulação física da bola e envia para o Jogador 2
         if (meuNumeroJogador !== 1) return;
     } else {
-        // Controles Offline (Singleplayer / Local)
         if (mouseAtivo && jogadorMouse === 1) {
             j1Y = mousePos.y - (alturaRaquete / 2.0);
         } else {
@@ -662,7 +710,6 @@ function atualizar() {
         }
     }
 
-    // Física e Movimentação da Bola
     if (!bolaEsperandoInicio) {
         bolaX += bolaXDir;
         bolaY += bolaYDir;
@@ -677,7 +724,6 @@ function atualizar() {
             criarParticulas(bolaX + tamanhoBola / 2, bolaY <= 0 ? 0 : ALTURA, corBola, 10);
         }
 
-        // Colisão Raquete J1
         if (bolaX <= 30 + LARGURA_RAQUETE && bolaX >= 30) {
             if (bolaY + tamanhoBola >= j1Y && bolaY <= j1Y + alturaRaquete) {
                 let impactoRelativo = (bolaY + tamanhoBola / 2) - (j1Y + alturaRaquete / 2);
@@ -711,7 +757,6 @@ function atualizar() {
                 aumentarVelocidadeFrenesi();
             }
         } else {
-            // Colisão Raquete J2
             if (bolaX + tamanhoBola >= LARGURA - 30 - LARGURA_RAQUETE && bolaX + tamanhoBola <= LARGURA - 30) {
                 if (bolaY + tamanhoBola >= j2Y && bolaY <= j2Y + alturaRaquete) {
                     let impactoRelativo = (bolaY + tamanhoBola / 2) - (j2Y + alturaRaquete / 2);
@@ -750,7 +795,6 @@ function atualizar() {
         }
     }
 
-    // Sincronizar dados com o Jogador 2 se for Host Online
     if (modoOnline && meuNumeroJogador === 1 && socket) {
         socket.emit('updateGameState', {
             bola: { x: bolaX, y: bolaY, vx: bolaXDir, vy: bolaYDir },
@@ -815,12 +859,8 @@ function alterarOpcaoOpcoes(direcao) {
             dificuldadeAtual = (dificuldadeAtual + direcao + 4) % 4;
             aplicarDificuldade();
             break;
-        case 1:
-            mouseAtivo = !mouseAtivo;
-            break;
-        case 2:
-            jogadorMouse = jogadorMouse === 1 ? 2 : 1;
-            break;
+        case 1: mouseAtivo = !mouseAtivo; break;
+        case 2: jogadorMouse = jogadorMouse === 1 ? 2 : 1; break;
         case 3:
             idxCorJ1 = (idxCorJ1 + direcao + CORES_DISPONIVEIS.length) % CORES_DISPONIVEIS.length;
             corJ1 = CORES_DISPONIVEIS[idxCorJ1];
@@ -896,12 +936,6 @@ window.addEventListener('keydown', (e) => {
         if (e.code === "Enter" || e.code === "Space") {
             if (socket) socket.emit('createRoom');
         } else if (e.code === "Escape") {
-            estadoAtual = EstadoJogo.MENU_ONLINE;
-        }
-    }
-    else if (estadoAtual === EstadoJogo.AGUARDANDO_JOGADOR) {
-        if (e.code === "Escape") {
-            modoOnline = false;
             estadoAtual = EstadoJogo.MENU_ONLINE;
         }
     }
@@ -1043,44 +1077,32 @@ canvas.addEventListener('mousemove', (e) => {
     if (estadoAtual === EstadoJogo.MENU_MODO) {
         for (let i = 0; i < 6; i++) {
             let itemY = 190 + (i * 45);
-            if (y >= itemY - 20 && y <= itemY + 20) {
-                opcaoMenuModo = i;
-            }
+            if (y >= itemY - 20 && y <= itemY + 20) opcaoMenuModo = i;
         }
     } else if (estadoAtual === EstadoJogo.MENU_ONLINE) {
         for (let i = 0; i < 3; i++) {
             let itemY = 260 + (i * 60);
-            if (y >= itemY - 20 && y <= itemY + 20) {
-                opcaoMenuOnline = i;
-            }
+            if (y >= itemY - 20 && y <= itemY + 20) opcaoMenuOnline = i;
         }
     } else if (estadoAtual === EstadoJogo.MENU_TIPO_JOGO) {
         for (let i = 0; i < 2; i++) {
             let itemY = 270 + (i * 60);
-            if (y >= itemY - 20 && y <= itemY + 20) {
-                opcaoMenuTipoJogo = i;
-            }
+            if (y >= itemY - 20 && y <= itemY + 20) opcaoMenuTipoJogo = i;
         }
     } else if (estadoAtual === EstadoJogo.MENU_META_PONTOS) {
         for (let i = 0; i < OPCOES_PONTOS.length; i++) {
             let itemY = 220 + (i * 48);
-            if (y >= itemY - 20 && y <= itemY + 20) {
-                indiceOpcaoPontos = i;
-            }
+            if (y >= itemY - 20 && y <= itemY + 20) indiceOpcaoPontos = i;
         }
     } else if (estadoAtual === EstadoJogo.MENU_OPCOES) {
         for (let i = 0; i < 14; i++) {
             let itemY = 85 + (i * 28);
-            if (y >= itemY - 14 && y <= itemY + 14) {
-                opcaoMenuOpcoes = i;
-            }
+            if (y >= itemY - 14 && y <= itemY + 14) opcaoMenuOpcoes = i;
         }
     } else if (estadoAtual === EstadoJogo.PAUSADO) {
         for (let i = 0; i < 4; i++) {
             let itemY = 270 + (i * 50);
-            if (y >= itemY - 20 && y <= itemY + 20) {
-                opcaoMenuPausa = i;
-            }
+            if (y >= itemY - 20 && y <= itemY + 20) opcaoMenuPausa = i;
         }
     }
 });
@@ -1109,7 +1131,6 @@ canvas.addEventListener('mousedown', (e) => {
     }
 });
 
-// Suporte Touch
 canvas.addEventListener('touchmove', (e) => {
     e.preventDefault();
     const rect = canvas.getBoundingClientRect();

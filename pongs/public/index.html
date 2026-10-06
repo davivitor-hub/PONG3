@@ -11,6 +11,20 @@
 
 <div class="canvas-container" id="canvasContainer">
     <canvas id="gameCanvas" width="800" height="600"></canvas>
+    
+    <!-- Overlay HTML para Copiar Link/Código da Sala no Multiplayer -->
+    <div id="multiplayerUI" class="multiplayer-ui hidden">
+        <div class="ui-card">
+            <h2 id="uiRoomTitle">SALA CRIADA</h2>
+            <div class="code-box" id="uiRoomCode">000000</div>
+            <p class="status-text" id="uiStatusText">Aguardando o Jogador 2 conectar...</p>
+            <div class="btn-group">
+                <button id="btnCopyCode" class="glow-btn">Copiar Código</button>
+                <button id="btnCopyLink" class="glow-btn">Copiar Link Directo</button>
+            </div>
+            <button id="btnCancelRoom" class="glow-btn cancel-btn">Sair da Sala</button>
+        </div>
+    </div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>

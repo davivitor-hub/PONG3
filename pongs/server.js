@@ -1,12 +1,18 @@
 const express = require('express');
 const http = require('http');
+const path = require('path');
 const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Rota amigável para entrar diretamente por link (ex: /join/123456)
+app.get('/join/:roomId', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 const rooms = {};
 
@@ -82,7 +88,7 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Sincronização de Estado/Bola pelo Host (Jogador 1)
+  // Sincronização do Estado / Bola pelo Host (Jogador 1)
   socket.on('updateGameState', (state) => {
     const room = rooms[socket.roomId];
     if (!room || socket.playerNum !== 1) return;
