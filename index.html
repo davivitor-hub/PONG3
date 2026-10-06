@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pong Neon Arena</title><link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <header><div class="brand"><span class="dot"></span><div><b>PONG</b><small>NEON ARENA</small></div></div><div id="net" class="net offline">● OFFLINE</div></header>
+  <main>
+    <section class="stage"><canvas id="game" width="800" height="600"></canvas><div id="toast" class="toast"></div></section>
+    <aside class="panel" id="menu">
+      <div id="home" class="screen active"><p class="eyebrow">ARCADE // 07</p><h1>PONG<br><em>NEON ARENA</em></h1><p class="sub">Velocidade, precisão e reflexos.</p>
+        <button data-action="local" class="primary">JOGAR LOCAL <span>2 jogadores</span></button><button data-action="bot">JOGAR VS BOT <span>1 jogador</span></button><button data-action="online">MULTIPLAYER ONLINE <span>criar ou entrar</span></button>
+        <div class="keys">W / S <i>JOGADOR 1</i><strong>↑ / ↓</strong> <i>JOGADOR 2</i></div></div>
+      <div id="online" class="screen"><button class="back" data-action="home">← MENU</button><p class="eyebrow">MULTIPLAYER</p><h2>ARENA ONLINE</h2><div class="tabs"><button data-tab="create" class="tab active">CRIAR</button><button data-tab="join" class="tab">ENTRAR</button></div>
+        <div id="create" class="tabbody active"><label>Nome da sala<input id="roomName" maxlength="24" placeholder="Arena dos amigos"></label><label>Código personalizado <small>opcional</small><input id="roomCode" maxlength="8" placeholder="Ex.: SOMBRA"></label><label class="check"><input id="roomPublic" type="checkbox" checked> Sala pública</label><button id="createBtn" class="primary">CRIAR SALA</button></div>
+        <div id="join" class="tabbody"><label>Código da sala<input id="joinCode" maxlength="8" placeholder="123456"></label><button id="joinBtn" class="primary">ENTRAR NA SALA</button><div class="rooms"><div class="rooms-title">SALAS PÚBLICAS <button id="refresh">↻</button></div><div id="roomsList"><span class="muted">Nenhuma sala disponível.</span></div></div></div>
+      </div>
+      <div id="waiting" class="screen"><p class="eyebrow">SALA CRIADA</p><h2 id="waitingName">ARENA</h2><div class="code" id="waitingCode">000000</div><p>Envie este código para seu amigo.</p><button id="copy" class="primary">COPIAR CÓDIGO</button><button id="leave">SAIR DA SALA</button></div>
+      <div id="result" class="screen"><p class="eyebrow">PARTIDA ENCERRADA</p><h2 id="winner">JOGADOR 1 VENCEU</h2><div id="finalScore" class="final-score">7 — 4</div><button id="again" class="primary">JOGAR NOVAMENTE</button><button data-action="home">MENU</button></div>
+    </aside>
+  </main>
+  <footer><span>LOCAL: W/S • ↑/↓</span><span>MOUSE: mova a raquete</span><span>ONLINE: servidor autoritativo</span></footer>
+</div>
+<script src="/socket.io/socket.io.js"></script><script src="game.js"></script>
+</body></html>
