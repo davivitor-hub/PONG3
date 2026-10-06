@@ -1,52 +1,55 @@
-# Pong Neon Arena 2.1 — Internet
+# Pong Neon Arena — GitHub Pages + Render
 
-Esta versão foi preparada para hospedagem pública. O navegador **não possui localhost fixo**: o Socket.IO se conecta automaticamente ao mesmo domínio que entregou o jogo.
+Esta versão separa o projeto em duas partes:
 
-## Opção 1 — Render
+- **GitHub Pages:** hospeda `index.html`, `style.css`, `game.js` e `config.js`.
+- **Render:** executa `server.js` e mantém as salas/multiplayer com Socket.IO.
 
-1. Crie um repositório no GitHub e envie todos os arquivos desta pasta.
-2. No Render, crie um **Web Service** conectado ao repositório.
-3. Build Command: `npm install`
-4. Start Command: `npm start`
-5. Node 18+ é recomendado (o projeto declara Node >=18).
-6. Publique o serviço.
+## 1. Publicar o servidor no Render
 
-O arquivo `render.yaml` já contém a configuração básica para o Render.
+Envie estes arquivos para um repositório GitHub:
 
-Depois de publicado, o endereço será parecido com:
+`server.js`, `package.json`, `render.yaml` (e os demais arquivos do projeto).
 
-`https://seu-jogo.onrender.com`
+No Render, crie um Web Service conectado ao repositório. O `render.yaml` usa:
 
-Abra esse endereço e compartilhe com o outro jogador. As salas e o multiplayer usam o servidor automaticamente.
+- Build: `npm install`
+- Start: `npm start`
+- Node 18+
 
-## Link direto para uma sala
+O servidor deve ficar em um endereço semelhante a:
 
-Depois de criar uma sala, o botão de copiar link gera:
+`https://pong-neon-arena.onrender.com`
 
-`https://seu-dominio.com/join/CODIGO`
+Se o Render gerar outro endereço, abra `config.js` e altere `window.PONG_SERVER_URL`.
 
-Esse link abre o jogo e entra diretamente na sala.
+## 2. Publicar o site no GitHub Pages
 
-## Opção 2 — Docker
+Na pasta do site, publique:
 
-```bash
-docker build -t pong-neon-arena .
-docker run -p 3000:3000 pong-neon-arena
-```
+- `index.html`
+- `style.css`
+- `game.js`
+- `config.js`
 
-Em uma VPS, coloque um domínio/reverse proxy na porta 3000 e habilite WebSocket.
+O `index.html` já carrega Socket.IO pelo CDN e o `game.js` conecta ao servidor definido em `config.js`.
 
-## HTTPS
+## 3. Link do jogo
 
-Em hospedagens como Render, o HTTPS é fornecido pela plataforma. O cliente usa o mesmo domínio, portanto o Socket.IO passa a usar `wss://` automaticamente quando a página estiver em HTTPS.
+Depois de publicado, o endereço será:
 
-## Teste local
+`https://davivitor-hub.github.io/PONG3/`
 
-```bash
-npm install
-npm start
-```
+## 4. Link para entrar diretamente em uma sala
 
-Depois: `http://localhost:3000`
+Quando uma sala for criada, o jogo gera um link neste formato:
 
-O localhost serve apenas para teste local; ele não é necessário no código do cliente para publicar o jogo na internet.
+`https://davivitor-hub.github.io/PONG3/?sala=CODIGO`
+
+Esse formato foi escolhido porque o GitHub Pages não executa a rota dinâmica `/join/CODIGO`. Ao abrir `?sala=CODIGO`, o navegador conecta ao servidor multiplayer e entra na sala automaticamente.
+
+## 5. Importante
+
+O GitHub Pages sozinho não executa Node.js/Socket.IO. Por isso o servidor Render é obrigatório para o multiplayer pela internet.
+
+O endereço `localhost` não é usado pelo cliente publicado.

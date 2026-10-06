@@ -74,7 +74,7 @@ function tickRoom(r) {
   if (b.x > 830) resetRound(r, 1);
 }
 setInterval(() => { for (const r of rooms.values()) tickRoom(r); }, 1000 / 60);
-setInterval(() => { for (const r of rooms.values()) if (r.running) sendState(r); }, 1000 / 30);
+setInterval(() => { for (const r of rooms.values()) if (r.running) sendState(r); }, 1000 / 60);
 
 io.on('connection', socket => {
   socket.emit('rooms:update', roomList());
