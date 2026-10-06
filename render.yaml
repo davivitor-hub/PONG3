@@ -1,9 +1,7 @@
 services:
   - type: web
-    name: pong-neon-arena
+    name: pongdas7sombras
     runtime: node
     buildCommand: npm install
     startCommand: npm start
-    envVars:
-      - key: NODE_ENV
-        value: production
+    healthCheckPath: /health

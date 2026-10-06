@@ -1,9 +1,9 @@
 {
-  "name": "pong-neon-arena",
-  "version": "2.0.0",
-  "description": "Pong multiplayer reconstruído com salas online e visual neon",
-  "main": "server.js",
-  "scripts": { "start": "node server.js", "dev": "node server.js" },
-  "engines": { "node": ">=18" },
-  "dependencies": { "express": "^4.21.2", "socket.io": "^4.8.1" }
+  "name":"pong-das-7-sombras-online",
+  "version":"2.0.0",
+  "private":true,
+  "main":"server.js",
+  "scripts":{"start":"node server.js"},
+  "engines":{"node":">=18"},
+  "dependencies":{"ws":"^8.18.0"}
 }
