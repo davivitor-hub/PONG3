@@ -1,13 +1,75 @@
-{
-  "name": "pong-7-sombras-multiplayer",
-  "version": "1.1.0",
-  "description": "Pong das 7 Sombras com Modos Solo, Local e Multiplayer Completo",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
-  },
-  "dependencies": {
-    "express": "^4.19.2",
-    "socket.io": "^4.7.5"
-  }
+const express = require('express');
+const http = require('http');
+const path = require('path');
+const { Server } = require('socket.io');
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: true, methods: ['GET', 'POST'] } });
+
+// Os arquivos deste projeto ficam na mesma pasta do server.js.
+app.use(express.static(__dirname));
+app.get('/join/:roomId', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+
+const rooms = Object.create(null);
+function cleanCode(value) { return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 8); }
+function generateRoomId() { let id; do id = Math.floor(100000 + Math.random() * 900000).toString(); while (rooms[id]); return id; }
+function publicRooms() { return Object.values(rooms).filter(r => r.isPublic && r.players.length < 2 && !r.gameStarted).map(r => ({ id:r.id, name:r.name, playersCount:r.players.length })); }
+function broadcastRooms() { io.emit('publicRoomsList', publicRooms()); }
+function leaveRoom(socket, notify=true) {
+  const id=socket.roomId, room=id && rooms[id];
+  if(!room){ socket.roomId=null; socket.playerNum=null; return; }
+  room.players=room.players.filter(p=>p!==socket.id);
+  socket.leave(id);
+  if(notify) socket.to(id).emit('playerDisconnected');
+  if(room.players.length===0) delete rooms[id]; else room.gameStarted=false;
+  socket.roomId=null; socket.playerNum=null; broadcastRooms();
 }
+
+io.on('connection', socket => {
+  socket.roomId=null; socket.playerNum=null;
+  socket.on('getPublicRooms', () => socket.emit('publicRoomsList', publicRooms()));
+
+  socket.on('createRoom', data => {
+    if(socket.roomId) leaveRoom(socket,false);
+    const custom=cleanCode(data?.customCode), id=custom||generateRoomId();
+    const isPublic=data?.isPublic !== false;
+    if(rooms[id]) return socket.emit('roomError','Este código/sala já existe! Escolha outro código.');
+    rooms[id]={ id, name:String(data?.roomName||`Sala ${id}`).trim().slice(0,30), isPublic, players:[socket.id],
+      j1Y:250,j2Y:250,pontosJ1:0,pontosJ2:0,bola:{x:391,y:291,vx:7,vy:7},bolaEsperandoInicio:true,gameStarted:false };
+    socket.join(id); socket.roomId=id; socket.playerNum=1;
+    socket.emit('roomCreated',{roomId:id,playerNum:1,isPublic,name:rooms[id].name});
+    broadcastRooms();
+  });
+
+  socket.on('joinRoom', roomId => {
+    const id=cleanCode(roomId), room=rooms[id];
+    if(!room) return socket.emit('roomError','Sala não encontrada!');
+    if(room.players.length>=2 || room.gameStarted) return socket.emit('roomError','Esta sala já está cheia!');
+    if(socket.roomId) leaveRoom(socket,false);
+    room.players.push(socket.id); room.gameStarted=true;
+    socket.join(id); socket.roomId=id; socket.playerNum=2;
+    socket.emit('roomJoined',{roomId:id,playerNum:2,name:room.name});
+    io.to(id).emit('gameStart',{roomId:id,j1Y:room.j1Y,j2Y:room.j2Y,pontosJ1:room.pontosJ1,pontosJ2:room.pontosJ2,bola:room.bola,bolaEsperandoInicio:room.bolaEsperandoInicio});
+    broadcastRooms();
+  });
+
+  socket.on('movePaddle', y => {
+    const room=rooms[socket.roomId]; if(!room || !Number.isFinite(Number(y))) return;
+    const value=Math.max(0,Math.min(500,Number(y)));
+    if(socket.playerNum===1) room.j1Y=value; else if(socket.playerNum===2) room.j2Y=value;
+    socket.to(socket.roomId).emit('opponentMoved',{playerNum:socket.playerNum,y:value});
+  });
+
+  socket.on('updateGameState', state => {
+    const room=rooms[socket.roomId]; if(!room || socket.playerNum!==1 || !state?.bola) return;
+    room.bola={x:Number(state.bola.x)||0,y:Number(state.bola.y)||0,vx:Number(state.bola.vx)||0,vy:Number(state.bola.vy)||0};
+    room.pontosJ1=Number(state.pontosJ1)||0; room.pontosJ2=Number(state.pontosJ2)||0; room.bolaEsperandoInicio=!!state.bolaEsperandoInicio;
+    socket.to(socket.roomId).emit('syncGameState',{bola:room.bola,pontosJ1:room.pontosJ1,pontosJ2:room.pontosJ2,bolaEsperandoInicio:room.bolaEsperandoInicio});
+  });
+  socket.on('leaveRoom',()=>leaveRoom(socket));
+  socket.on('disconnect',()=>leaveRoom(socket));
+});
+
+const PORT=process.env.PORT||3000;
+server.listen(PORT,()=>console.log(`Servidor rodando na porta ${PORT}`));
