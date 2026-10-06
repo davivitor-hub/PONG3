@@ -1,0 +1,36 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: #05050d;
+    color: #fff;
+    font-family: 'Orbitron', sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.canvas-container {
+    position: relative;
+    border-radius: 16px;
+    padding: 4px;
+    background: linear-gradient(135deg, #ff007f, #00f0ff);
+    box-shadow: 0 0 30px rgba(0, 240, 255, 0.3), 0 0 50px rgba(255, 0, 127, 0.2);
+    transition: transform 0.05s ease-out;
+}
+
+canvas {
+    display: block;
+    border-radius: 12px;
+    background-color: #080814;
+    cursor: pointer;
+    touch-action: none;
+}
