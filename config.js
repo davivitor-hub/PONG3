@@ -1,0 +1,1 @@
+window.PONG_SERVER_URL = 'https://pong3.onrender.com';

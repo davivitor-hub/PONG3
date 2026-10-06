@@ -2,6 +2,7 @@ const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
 const W=800,H=600;
 // Usa automaticamente o mesmo domínio onde o jogo foi hospedado.
 // Não há localhost fixo no cliente, então Socket.IO funciona em Render, Railway, VPS etc.
+const SERVER_URL=(window.PONG_SERVER_URL||location.origin).replace(/\/$/,'');
 const socket=typeof io==='function'?io({ transports:['websocket','polling'] }):null;
 const $=id=>document.getElementById(id); const screens=['home','online','waiting','result'];
 let mode='menu', online=false, player=0, room=null, state={p1:250,p2:250,score1:0,score2:0,ball:{x:400,y:300,vx:7,vy:2},running:false};
