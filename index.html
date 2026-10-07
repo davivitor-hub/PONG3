@@ -4,9 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pong das 7 Sombras</title>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Space+Mono&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <script src="config.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
 <body>
@@ -18,29 +17,31 @@
 
     <!-- Tela do Lobby Online / X1 -->
     <div id="onlineScreen" class="overlay-screen">
-        <h2>X1 ONLINE - LOBBY</h2>
+        <h2>X1 ONLINE MULTIPLAYER</h2>
         <div class="tabs">
             <button class="tab active" data-tab="createTab">Criar Sala</button>
-            <button class="tab" data-tab="joinTab">Entrar por Codigo</button>
-            <button class="tab" data-tab="listTab">Salas Publicas</button>
+            <button class="tab" data-tab="joinTab">Entrar por Código</button>
+            <button class="tab" data-tab="listTab">Salas Públicas</button>
         </div>
 
         <div id="createTab" class="tabbody active">
-            <input type="text" id="roomName" placeholder="Nome da Sala" value="Sala X1">
-            <input type="text" id="roomCode" placeholder="Codigo da Sala (Opcional)">
-            <label><input type="checkbox" id="roomPublic" checked> Sala Publica</label>
+            <input type="text" id="roomName" placeholder="Nome da Sala" value="Arena das Sombras">
+            <input type="text" id="roomCode" placeholder="Código Custom (Opcional)">
+            <label style="font-size: 12px; cursor: pointer;">
+                <input type="checkbox" id="roomPublic" checked> Sala Pública
+            </label>
             <button id="createBtn" class="btn">CRIAR SALA X1</button>
         </div>
 
         <div id="joinTab" class="tabbody">
-            <input type="text" id="joinCode" placeholder="Digite o Codigo da Sala">
+            <input type="text" id="joinCode" placeholder="Digite o Código da Sala">
             <button id="joinBtn" class="btn">ENTRAR NA SALA</button>
         </div>
 
         <div id="listTab" class="tabbody">
-            <button id="refresh" class="btn-sm">Atualizar Lista</button>
+            <button id="refresh" class="btn" style="padding: 6px; font-size: 12px;">Atualizar Lista</button>
             <div id="roomsList" class="rooms-list">
-                <span class="muted">Nenhuma sala disponivel.</span>
+                <span class="muted">Nenhuma sala disponível no momento.</span>
             </div>
         </div>
 
@@ -50,11 +51,11 @@
     <!-- Tela de Espera X1 -->
     <div id="waitingScreen" class="overlay-screen">
         <h2>AGUARDANDO OPONENTE</h2>
-        <p>Nome da Sala: <strong id="waitingName">---</strong></p>
-        <p>Codigo da Sala: <strong id="waitingCode">---</strong></p>
-        <div class="actions">
+        <p style="margin-bottom: 8px;">Nome: <strong id="waitingName" style="color: #00f0ff;">---</strong></p>
+        <p style="margin-bottom: 20px;">Código: <strong id="waitingCode" style="color: #ff007f;">---</strong></p>
+        <div style="display: flex; gap: 10px;">
             <button id="copyBtn" class="btn">COPIAR LINK X1</button>
-            <button id="leaveBtn" class="btn-cancel">CANCELAR</button>
+            <button id="leaveBtn" class="btn-cancel" style="margin-top:0;">CANCELAR</button>
         </div>
     </div>
 </div>

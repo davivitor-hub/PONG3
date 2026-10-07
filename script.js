@@ -11,11 +11,12 @@ const socket = typeof io === 'function' ? io(SERVER_URL, {
   reconnection: true
 }) : null;
 
+// Audio FX Sintetizado
 class SoundFX {
-    constructor() { this.ctx = null; }
+    constructor() { this.ctx = null; this.enabled = true; }
     init() { if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); }
     playTone(freq, type, duration, vol = 0.1) {
-        if (!this.ctx) return;
+        if (!this.ctx || !this.enabled) return;
         try {
             const osc = this.ctx.createOscillator();
             const gain = this.ctx.createGain();
@@ -29,40 +30,85 @@ class SoundFX {
             osc.stop(this.ctx.currentTime + duration);
         } catch (e) {}
     }
-    hitPaddle() { this.playTone(440, 'square', 0.1, 0.2); }
-    hitWall() { this.playTone(220, 'sine', 0.08, 0.15); }
+    hitPaddle() { this.playTone(440, 'square', 0.08, 0.15); }
+    hitWall() { this.playTone(220, 'sine', 0.06, 0.1); }
     score() { 
-        this.playTone(587.33, 'triangle', 0.15, 0.25);
-        setTimeout(() => this.playTone(880, 'triangle', 0.2, 0.25), 100);
+        this.playTone(587.33, 'triangle', 0.12, 0.2);
+        setTimeout(() => this.playTone(880, 'triangle', 0.18, 0.2), 90);
     }
-    menuSelect() { this.playTone(600, 'sine', 0.05, 0.1); }
+    menuSelect() { this.playTone(600, 'sine', 0.04, 0.08); }
+    frenzy() { this.playTone(900 + Math.random() * 300, 'sawtooth', 0.05, 0.12); }
 }
 
 const sounds = new SoundFX();
 
 const EstadoJogo = {
-    MENU_MODO: 0,
-    MENU_TIPO_JOGO: 1,
-    MENU_META_PONTOS: 2,
-    MENU_OPCOES: 3,
-    JOGANDO: 4,
-    PAUSADO: 5,
-    FIM_DE_JOGO: 6,
-    ONLINE_LOBBY: 7,
-    ONLINE_WAITING: 8,
-    ONLINE_GAME: 9
+    MENU_PRINCIPAL: 0,
+    MENU_SKINS: 1,
+    MENU_OPCOES: 2,
+    JOGANDO: 3,
+    ONLINE_LOBBY: 4,
+    ONLINE_WAITING: 5,
+    ONLINE_GAME: 6
 };
 
-let estadoAtual = EstadoJogo.MENU_MODO;
-let modoBot = false, modoTreino = false, modoOnline = false;
-let jogadorNum = 1, codigoSalaAtual = null;
+let estadoAtual = EstadoJogo.MENU_PRINCIPAL;
+let modoBot = false;
+let modoInfinito = false;
+let jogadorNum = 1;
+let codigoSalaAtual = null;
 
+// Configurações
+const configs = {
+    mouseP1: true,
+    mouseP2: false,
+    p1Up: 'KeyW',
+    p1Down: 'KeyS',
+    p2Up: 'ArrowUp',
+    p2Down: 'ArrowDown',
+    audio: true
+};
+
+const teclasPressionadas = {};
+
+// Skins
+const SKINS_RAQUETE = [
+    { name: 'Cyber Cyan', color: '#00f0ff', glow: '#00f0ff' },
+    { name: 'Neon Pink', color: '#ff007f', glow: '#ff007f' },
+    { name: 'Gold Champion', color: '#ffd700', glow: '#ffaa00' },
+    { name: 'Matrix Code', color: '#00ff66', glow: '#00ff66' },
+    { name: 'Void Shadow', color: '#9333ea', glow: '#a855f7' }
+];
+
+const SKINS_BOLA = [
+    { name: 'Energy Core', color: '#ffffff', glow: '#00f0ff' },
+    { name: 'Magma Flare', color: '#ff3300', glow: '#ff6600' },
+    { name: 'Plasma Orb', color: '#e0aaff', glow: '#c77dff' },
+    { name: 'Dark Matter', color: '#00ffff', glow: '#ff007f' },
+    { name: 'Gold Star', color: '#ffee00', glow: '#ffaa00' }
+];
+
+let skinP1Idx = 0;
+let skinP2Idx = 1;
+let skinBolaIdx = 0;
+
+// Variáveis de Jogo
 let j1Y = 250, j2Y = 250;
-let bolaX = 400, bolaY = 300, bolaXDir = 7, bolaYDir = 2;
+let bolaX = 400, bolaY = 300;
+let velocidadeBase = 7;
+let bolaXDir = 7, bolaYDir = 3;
 let pontosJ1 = 0, pontosJ2 = 0;
-let alturaRaquete = 100, tamanhoBola = 18;
+let comboFrenesi = 0;
+let comboMaximo = 0;
+let alturaRaquete = 100, larguraRaquete = 14;
+let tamanhoBola = 18;
+let particulas = [];
 
-let opcaoMenuModo = 0;
+// Menu / Mouse
+let opcaoMenuPrincipal = 0;
+let botoesMenu = [];
+let remapeandoChave = null;
+
 const $ = id => document.getElementById(id);
 
 function toast(msg) {
@@ -72,116 +118,423 @@ function toast(msg) {
     setTimeout(() => e.classList.remove('show'), 2200);
 }
 
+function registrarBotao(x, y, w, h, acao) {
+    botoesMenu.push({ x, y, w, h, acao });
+}
+
 function gameLoop() {
     atualizar();
     desenhar();
     requestAnimationFrame(gameLoop);
 }
 
+function resetarBola(direcao = 1) {
+    bolaX = LARGURA / 2;
+    bolaY = ALTURA / 2;
+    let vel = modoInfinito ? 8 : 7;
+    bolaXDir = vel * direcao;
+    bolaYDir = (Math.random() > 0.5 ? 1 : -1) * (3 + Math.random() * 2);
+    if (modoInfinito) {
+        comboFrenesi = 0;
+    }
+}
+
+function resetarJogo() {
+    j1Y = 250;
+    j2Y = 250;
+    pontosJ1 = 0;
+    pontosJ2 = 0;
+    comboFrenesi = 0;
+    comboMaximo = 0;
+    particulas = [];
+    resetarBola();
+}
+
+function criarParticulas(x, y, cor) {
+    for (let i = 0; i < 8; i++) {
+        particulas.push({
+            x, y,
+            vx: (Math.random() - 0.5) * 6,
+            vy: (Math.random() - 0.5) * 6,
+            cor: cor,
+            vida: 1.0
+        });
+    }
+}
+
+function atualizar() {
+    if (estadoAtual === EstadoJogo.JOGANDO) {
+        // Movimentação Teclado P1
+        if (!configs.mouseP1) {
+            if (teclasPressionadas[configs.p1Up]) j1Y = Math.max(0, j1Y - 8);
+            if (teclasPressionadas[configs.p1Down]) j1Y = Math.min(ALTURA - alturaRaquete, j1Y + 8);
+        }
+
+        // Movimentação Teclado P2 ou BOT
+        if (modoBot) {
+            let centroBot = j2Y + alturaRaquete / 2;
+            if (centroBot < bolaY - 15) j2Y += 5.5;
+            else if (centroBot > bolaY + 15) j2Y -= 5.5;
+            j2Y = Math.max(0, Math.min(ALTURA - alturaRaquete, j2Y));
+        } else if (!configs.mouseP2) {
+            if (teclasPressionadas[configs.p2Up]) j2Y = Math.max(0, j2Y - 8);
+            if (teclasPressionadas[configs.p2Down]) j2Y = Math.min(ALTURA - alturaRaquete, j2Y + 8);
+        }
+
+        // Física da Bola
+        bolaX += bolaXDir;
+        bolaY += bolaYDir;
+
+        if (bolaY <= tamanhoBola / 2 || bolaY >= ALTURA - tamanhoBola / 2) {
+            bolaYDir *= -1;
+            sounds.hitWall();
+        }
+
+        // Colisão Raquete P1
+        if (bolaX - tamanhoBola / 2 <= 30 + larguraRaquete &&
+            bolaX + tamanhoBola / 2 >= 30 &&
+            bolaY >= j1Y && bolaY <= j1Y + alturaRaquete) {
+            
+            bolaXDir = Math.abs(bolaXDir);
+            if (modoInfinito) {
+                bolaXDir *= 1.08;
+                bolaYDir *= 1.05;
+                comboFrenesi++;
+                if (comboFrenesi > comboMaximo) comboMaximo = comboFrenesi;
+                sounds.frenzy();
+                criarParticulas(bolaX, bolaY, SKINS_RAQUETE[skinP1Idx].color);
+            } else {
+                sounds.hitPaddle();
+            }
+        }
+
+        // Colisão Raquete P2
+        if (bolaX + tamanhoBola / 2 >= LARGURA - 30 - larguraRaquete &&
+            bolaX - tamanhoBola / 2 <= LARGURA - 30 &&
+            bolaY >= j2Y && bolaY <= j2Y + alturaRaquete) {
+
+            bolaXDir = -Math.abs(bolaXDir);
+            if (modoInfinito) {
+                bolaXDir *= 1.08;
+                bolaYDir *= 1.05;
+                comboFrenesi++;
+                if (comboFrenesi > comboMaximo) comboMaximo = comboFrenesi;
+                sounds.frenzy();
+                criarParticulas(bolaX, bolaY, SKINS_RAQUETE[skinP2Idx].color);
+            } else {
+                sounds.hitPaddle();
+            }
+        }
+
+        // Pontuação
+        if (bolaX < 0) {
+            pontosJ2++;
+            sounds.score();
+            resetarBola(1);
+        } else if (bolaX > LARGURA) {
+            pontosJ1++;
+            sounds.score();
+            resetarBola(-1);
+        }
+    } else if (estadoAtual === EstadoJogo.ONLINE_GAME) {
+        // Movimentação local teclado para o player online
+        let minhaKeyUp = jogadorNum === 1 ? configs.p1Up : configs.p2Up;
+        let minhaKeyDown = jogadorNum === 1 ? configs.p1Down : configs.p2Down;
+        let usaMouse = jogadorNum === 1 ? configs.mouseP1 : configs.mouseP2;
+
+        if (!usaMouse) {
+            let posAtual = jogadorNum === 1 ? j1Y : j2Y;
+            if (teclasPressionadas[minhaKeyUp]) posAtual = Math.max(0, posAtual - 8);
+            if (teclasPressionadas[minhaKeyDown]) posAtual = Math.min(ALTURA - alturaRaquete, posAtual + 8);
+            
+            if (jogadorNum === 1) j1Y = posAtual; else j2Y = posAtual;
+            if (socket) socket.emit('paddle:set', posAtual);
+        }
+    }
+
+    // Partículas Modo Frenesi
+    for (let i = particulas.length - 1; i >= 0; i--) {
+        let p = particulas[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vida -= 0.04;
+        if (p.vida <= 0) particulas.splice(i, 1);
+    }
+}
+
 function desenhar() {
     ctx.fillStyle = "#080814";
     ctx.fillRect(0, 0, LARGURA, ALTURA);
 
-    if (estadoAtual === EstadoJogo.MENU_MODO) {
-        desenharMenuModo();
-    } else if (estadoAtual === EstadoJogo.JOGANDO || estadoAtual === EstadoJogo.ONLINE_GAME) {
-        desenharJogo();
-    }
+    if (estadoAtual === EstadoJogo.MENU_PRINCIPAL) desenharMenuPrincipal();
+    else if (estadoAtual === EstadoJogo.MENU_SKINS) desenharMenuSkins();
+    else if (estadoAtual === EstadoJogo.MENU_OPCOES) desenharMenuOpcoes();
+    else if (estadoAtual === EstadoJogo.JOGANDO || estadoAtual === EstadoJogo.ONLINE_GAME) desenharJogo();
 }
 
-function desenharMenuModo() {
-    ctx.font = "bold 38px Orbitron";
+function desenharMenuPrincipal() {
+    botoesMenu = [];
+    ctx.font = "bold 36px Orbitron";
     ctx.fillStyle = "#00F0FF";
     ctx.textAlign = "center";
-    ctx.fillText("PONG DAS 7 SOMBRAS", LARGURA / 2, 120);
+    ctx.shadowColor = "#00F0FF";
+    ctx.shadowBlur = 12;
+    ctx.fillText("PONG DAS 7 SOMBRAS", LARGURA / 2, 90);
+    ctx.shadowBlur = 0;
 
     const ops = [
         "1 JOGADOR (VS BOT)",
         "2 JOGADORES (LOCAL)",
+        "INFINITO FRENESI",
         "X1 ONLINE (MULTIPLAYER)",
-        "MODO TREINO"
+        "SKINS E VISUAIS",
+        "OPÇÕES & CONTROLES"
     ];
 
     for (let i = 0; i < ops.length; i++) {
+        let y = 170 + (i * 55);
+        let texto = (opcaoMenuPrincipal === i ? "> " : "  ") + ops[i];
         ctx.font = "20px Orbitron";
-        ctx.fillStyle = (opcaoMenuModo === i) ? "#FF007F" : "#FFFFFF";
-        ctx.fillText((opcaoMenuModo === i ? "> " : "  ") + ops[i], LARGURA / 2, 220 + (i * 50));
+        let tw = ctx.measureText(texto).width;
+        let bx = LARGURA / 2 - tw / 2 - 10;
+        let by = y - 24;
+        let bw = tw + 20;
+        let bh = 34;
+
+        registrarBotao(bx, by, bw, bh, () => executarMenuPrincipal(i));
+
+        if (opcaoMenuPrincipal === i) {
+            ctx.fillStyle = "rgba(255, 0, 127, 0.2)";
+            ctx.fillRect(bx, by, bw, bh);
+            ctx.fillStyle = "#FF007F";
+        } else {
+            ctx.fillStyle = "#FFFFFF";
+        }
+        ctx.fillText(texto, LARGURA / 2, y);
     }
+}
+
+function executarMenuPrincipal(idx) {
+    sounds.menuSelect();
+    opcaoMenuPrincipal = idx;
+    if (idx === 0) { modoBot = true; modoInfinito = false; estadoAtual = EstadoJogo.JOGANDO; resetarJogo(); }
+    if (idx === 1) { modoBot = false; modoInfinito = false; estadoAtual = EstadoJogo.JOGANDO; resetarJogo(); }
+    if (idx === 2) { modoBot = false; modoInfinito = true; estadoAtual = EstadoJogo.JOGANDO; resetarJogo(); }
+    if (idx === 3) { abrirLobbyOnline(); }
+    if (idx === 4) { estadoAtual = EstadoJogo.MENU_SKINS; }
+    if (idx === 5) { estadoAtual = EstadoJogo.MENU_OPCOES; }
+}
+
+function desenharMenuSkins() {
+    botoesMenu = [];
+    ctx.font = "bold 28px Orbitron";
+    ctx.fillStyle = "#FF007F";
+    ctx.textAlign = "center";
+    ctx.fillText("MENU DE SKINS", LARGURA / 2, 70);
+
+    let op1 = `< RAQUETE P1: ${SKINS_RAQUETE[skinP1Idx].name} >`;
+    let op2 = `< RAQUETE P2: ${SKINS_RAQUETE[skinP2Idx].name} >`;
+    let op3 = `< BOLA: ${SKINS_BOLA[skinBolaIdx].name} >`;
+
+    ctx.font = "18px Orbitron";
+    ctx.fillStyle = "#00F0FF"; ctx.fillText(op1, LARGURA / 2, 140);
+    registrarBotao(LARGURA / 2 - 200, 120, 400, 30, () => { skinP1Idx = (skinP1Idx + 1) % SKINS_RAQUETE.length; sounds.menuSelect(); });
+
+    ctx.fillStyle = "#FF007F"; ctx.fillText(op2, LARGURA / 2, 210);
+    registrarBotao(LARGURA / 2 - 200, 190, 400, 30, () => { skinP2Idx = (skinP2Idx + 1) % SKINS_RAQUETE.length; sounds.menuSelect(); });
+
+    ctx.fillStyle = "#FFFF00"; ctx.fillText(op3, LARGURA / 2, 280);
+    registrarBotao(LARGURA / 2 - 200, 260, 400, 30, () => { skinBolaIdx = (skinBolaIdx + 1) % SKINS_BOLA.length; sounds.menuSelect(); });
+
+    // Preview
+    ctx.fillStyle = SKINS_RAQUETE[skinP1Idx].color;
+    ctx.shadowColor = SKINS_RAQUETE[skinP1Idx].glow; ctx.shadowBlur = 10;
+    ctx.fillRect(LARGURA / 2 - 120, 350, 14, 80);
+
+    ctx.fillStyle = SKINS_RAQUETE[skinP2Idx].color;
+    ctx.shadowColor = SKINS_RAQUETE[skinP2Idx].glow;
+    ctx.fillRect(LARGURA / 2 + 106, 350, 14, 80);
+
+    ctx.fillStyle = SKINS_BOLA[skinBolaIdx].color;
+    ctx.shadowColor = SKINS_BOLA[skinBolaIdx].glow;
+    ctx.beginPath();
+    ctx.arc(LARGURA / 2, 390, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Botão Voltar
+    ctx.font = "20px Orbitron";
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillText("VOLTAR AO MENU", LARGURA / 2, 510);
+    registrarBotao(LARGURA / 2 - 100, 490, 200, 30, () => { estadoAtual = EstadoJogo.MENU_PRINCIPAL; sounds.menuSelect(); });
+}
+
+function desenharMenuOpcoes() {
+    botoesMenu = [];
+    ctx.font = "bold 28px Orbitron";
+    ctx.fillStyle = "#00F0FF";
+    ctx.textAlign = "center";
+    ctx.fillText("OPÇÕES & CONTROLES", LARGURA / 2, 70);
+
+    ctx.font = "16px Orbitron";
+    
+    // Toggle Mouse P1
+    let textM1 = `MOUSE P1: ${configs.mouseP1 ? "LIGADO" : "DESLIGADO"}`;
+    ctx.fillStyle = configs.mouseP1 ? "#00FF66" : "#FF0055";
+    ctx.fillText(textM1, LARGURA / 2, 140);
+    registrarBotao(LARGURA / 2 - 150, 125, 300, 25, () => { configs.mouseP1 = !configs.mouseP1; sounds.menuSelect(); });
+
+    // Toggle Mouse P2
+    let textM2 = `MOUSE P2: ${configs.mouseP2 ? "LIGADO" : "DESLIGADO"}`;
+    ctx.fillStyle = configs.mouseP2 ? "#00FF66" : "#FF0055";
+    ctx.fillText(textM2, LARGURA / 2, 190);
+    registrarBotao(LARGURA / 2 - 150, 175, 300, 25, () => { configs.mouseP2 = !configs.mouseP2; sounds.menuSelect(); });
+
+    // Remapeamentos P1
+    ctx.fillStyle = "#FFFFFF";
+    let txtP1Up = `P1 SUBIR: [ ${remapeandoChave === 'p1Up' ? 'PRESSIONE...' : configs.p1Up} ]`;
+    let txtP1Down = `P1 DESCER: [ ${remapeandoChave === 'p1Down' ? 'PRESSIONE...' : configs.p1Down} ]`;
+    ctx.fillText(txtP1Up, LARGURA / 2, 250);
+    registrarBotao(LARGURA / 2 - 180, 235, 360, 25, () => { remapeandoChave = 'p1Up'; });
+    ctx.fillText(txtP1Down, LARGURA / 2, 290);
+    registrarBotao(LARGURA / 2 - 180, 275, 360, 25, () => { remapeandoChave = 'p1Down'; });
+
+    // Remapeamentos P2
+    let txtP2Up = `P2 SUBIR: [ ${remapeandoChave === 'p2Up' ? 'PRESSIONE...' : configs.p2Up} ]`;
+    let txtP2Down = `P2 DESCER: [ ${remapeandoChave === 'p2Down' ? 'PRESSIONE...' : configs.p2Down} ]`;
+    ctx.fillText(txtP2Up, LARGURA / 2, 350);
+    registrarBotao(LARGURA / 2 - 180, 335, 360, 25, () => { remapeandoChave = 'p2Up'; });
+    ctx.fillText(txtP2Down, LARGURA / 2, 390);
+    registrarBotao(LARGURA / 2 - 180, 375, 360, 25, () => { remapeandoChave = 'p2Down'; });
+
+    // Botão Voltar
+    ctx.font = "20px Orbitron";
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillText("SALVAR E VOLTAR", LARGURA / 2, 500);
+    registrarBotao(LARGURA / 2 - 120, 480, 240, 30, () => { estadoAtual = EstadoJogo.MENU_PRINCIPAL; remapeandoChave = null; sounds.menuSelect(); });
 }
 
 function desenharJogo() {
-    ctx.fillStyle = "#00F0FF";
-    ctx.fillRect(30, j1Y, 14, alturaRaquete);
+    // Desenhar Raquetes
+    ctx.fillStyle = SKINS_RAQUETE[skinP1Idx].color;
+    ctx.shadowColor = SKINS_RAQUETE[skinP1Idx].glow;
+    ctx.shadowBlur = 10;
+    ctx.fillRect(30, j1Y, larguraRaquete, alturaRaquete);
 
-    ctx.fillStyle = "#FF007F";
-    ctx.fillRect(LARGURA - 44, j2Y, 14, alturaRaquete);
+    ctx.fillStyle = SKINS_RAQUETE[skinP2Idx].color;
+    ctx.shadowColor = SKINS_RAQUETE[skinP2Idx].glow;
+    ctx.fillRect(LARGURA - 30 - larguraRaquete, j2Y, larguraRaquete, alturaRaquete);
 
-    ctx.fillStyle = "#FFFFFF";
+    // Partículas Frenesi
+    for (let p of particulas) {
+        ctx.fillStyle = p.cor;
+        ctx.globalAlpha = p.vida;
+        ctx.fillRect(p.x, p.y, 4, 4);
+    }
+    ctx.globalAlpha = 1.0;
+
+    // Desenhar Bola
+    ctx.fillStyle = SKINS_BOLA[skinBolaIdx].color;
+    ctx.shadowColor = SKINS_BOLA[skinBolaIdx].glow;
     ctx.beginPath();
     ctx.arc(bolaX, bolaY, tamanhoBola / 2, 0, Math.PI * 2);
     ctx.fill();
+    ctx.shadowBlur = 0;
 
-    ctx.font = "36px Orbitron";
-    ctx.fillText(pontosJ1, LARGURA / 2 - 80, 60);
-    ctx.fillText(pontosJ2, LARGURA / 2 + 80, 60);
+    // Placa de Pontos / UI
+    ctx.font = "32px Orbitron";
+    ctx.fillStyle = "#FFFFFF";
+    ctx.textAlign = "center";
+    
+    if (modoInfinito) {
+        let velAbs = Math.sqrt(bolaXDir * bolaXDir + bolaYDir * bolaYDir).toFixed(1);
+        ctx.fillText(`VELOCIDADE: ${velAbs}x`, LARGURA / 2, 50);
+        ctx.font = "18px Orbitron";
+        ctx.fillStyle = "#FF007F";
+        ctx.fillText(`COMBO FRENESI: ${comboFrenesi} (MÁX: ${comboMaximo})`, LARGURA / 2, 85);
+    } else {
+        ctx.fillText(`${pontosJ1}   |   ${pontosJ2}`, LARGURA / 2, 50);
+    }
 }
 
-function atualizar() {
-    if (estadoAtual !== EstadoJogo.JOGANDO) return;
-
-    bolaX += bolaXDir;
-    bolaY += bolaYDir;
-
-    if (bolaY <= 0 || bolaY >= ALTURA) bolaYDir *= -1;
-
-    if (bolaX <= 44 && bolaY >= j1Y && bolaY <= j1Y + alturaRaquete) bolaXDir *= -1;
-    if (bolaX >= LARGURA - 44 && bolaY >= j2Y && bolaY <= j2Y + alturaRaquete) bolaXDir *= -1;
-
-    if (bolaX < 0) { pontosJ2++; reiniciarBola(); }
-    if (bolaX > LARGURA) { pontosJ1++; reiniciarBola(); }
-}
-
-function reiniciarBola() {
-    bolaX = LARGURA / 2;
-    bolaY = ALTURA / 2;
-    bolaXDir *= -1;
-}
-
+// Eventos de Mouse Canvas
 canvas.addEventListener('mousemove', (e) => {
     const rect = canvas.getBoundingClientRect();
-    const y = (e.clientY - rect.top) * ALTURA / rect.height - alturaRaquete / 2;
+    const mx = (e.clientX - rect.left) * (LARGURA / rect.width);
+    const my = (e.clientY - rect.top) * (ALTURA / rect.height);
 
-    if (estadoAtual === EstadoJogo.JOGANDO) {
-        j1Y = y;
-    } else if (estadoAtual === EstadoJogo.ONLINE_GAME && socket) {
-        if (jogadorNum === 1) j1Y = y;
-        else j2Y = y;
-        socket.emit('paddle:set', y);
+    // Hover nos Menus
+    if (estadoAtual === EstadoJogo.MENU_PRINCIPAL) {
+        for (let i = 0; i < botoesMenu.length; i++) {
+            let b = botoesMenu[i];
+            if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) {
+                opcaoMenuPrincipal = i;
+            }
+        }
     }
-});
 
-window.addEventListener('keydown', (e) => {
-    sounds.init();
-    if (estadoAtual === EstadoJogo.MENU_MODO) {
-        if (e.code === "ArrowUp" || e.code === "KeyW") opcaoMenuModo = (opcaoMenuModo - 1 + 4) % 4;
-        if (e.code === "ArrowDown" || e.code === "KeyS") opcaoMenuModo = (opcaoMenuModo + 1) % 4;
-        if (e.code === "Enter" || e.code === "Space") {
-            if (opcaoMenuModo === 0) { modoBot = true; estadoAtual = EstadoJogo.JOGANDO; }
-            if (opcaoMenuModo === 1) { modoBot = false; estadoAtual = EstadoJogo.JOGANDO; }
-            if (opcaoMenuModo === 2) abrirLobbyOnline();
-            if (opcaoMenuModo === 3) { modoTreino = true; estadoAtual = EstadoJogo.JOGANDO; }
+    // Controle em Jogo via Mouse
+    if (estadoAtual === EstadoJogo.JOGANDO) {
+        let pY = Math.max(0, Math.min(ALTURA - alturaRaquete, my - alturaRaquete / 2));
+        if (configs.mouseP1) j1Y = pY;
+        if (configs.mouseP2 && !modoBot) j2Y = pY;
+    } else if (estadoAtual === EstadoJogo.ONLINE_GAME && socket) {
+        let pY = Math.max(0, Math.min(ALTURA - alturaRaquete, my - alturaRaquete / 2));
+        let usaMouse = jogadorNum === 1 ? configs.mouseP1 : configs.mouseP2;
+        if (usaMouse) {
+            if (jogadorNum === 1) j1Y = pY; else j2Y = pY;
+            socket.emit('paddle:set', pY);
         }
     }
 });
 
+canvas.addEventListener('click', (e) => {
+    sounds.init();
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (LARGURA / rect.width);
+    const my = (e.clientY - rect.top) * (ALTURA / rect.height);
+
+    for (let b of botoesMenu) {
+        if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) {
+            b.acao();
+            break;
+        }
+    }
+});
+
+// Eventos de Teclado
+window.addEventListener('keydown', (e) => {
+    sounds.init();
+    teclasPressionadas[e.code] = true;
+
+    if (remapeandoChave) {
+        configs[remapeandoChave] = e.code;
+        toast(`Tecla definida: ${e.code}`);
+        remapeandoChave = null;
+        sounds.menuSelect();
+        return;
+    }
+
+    if (estadoAtual === EstadoJogo.MENU_PRINCIPAL) {
+        if (e.code === "ArrowUp" || e.code === "KeyW") opcaoMenuPrincipal = (opcaoMenuPrincipal - 1 + 6) % 6;
+        if (e.code === "ArrowDown" || e.code === "KeyS") opcaoMenuPrincipal = (opcaoMenuPrincipal + 1) % 6;
+        if (e.code === "Enter" || e.code === "Space") executarMenuPrincipal(opcaoMenuPrincipal);
+    } else if (e.code === "Escape") {
+        estadoAtual = EstadoJogo.MENU_PRINCIPAL;
+    }
+});
+
+window.addEventListener('keyup', (e) => {
+    teclasPressionadas[e.code] = false;
+});
+
+// Suporte X1 Online
 function abrirLobbyOnline() {
-    modoOnline = true;
     estadoAtual = EstadoJogo.ONLINE_LOBBY;
     $('onlineScreen').classList.add('active');
     if (socket) socket.emit('rooms:list');
 }
 
-// Eventos de Interface X1
 document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
     document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
     document.querySelectorAll('.tabbody').forEach(x => x.classList.remove('active'));
@@ -200,23 +553,23 @@ $('joinBtn').onclick = () => {
 };
 
 $('refresh').onclick = () => socket?.emit('rooms:list');
+
 $('backBtn').onclick = () => {$('onlineScreen').classList.remove('active');
-    estadoAtual = EstadoJogo.MENU_MODO;
+    estadoAtual = EstadoJogo.MENU_PRINCIPAL;
 };
 
 $('copyBtn').onclick = () => {
     const link = `${location.origin}/?sala=${codigoSalaAtual}`;
     navigator.clipboard.writeText(link);
-    toast('Link do X1 copiado!');
+    toast('Link copiado!');
 };
 
 $('leaveBtn').onclick = () => {
     socket?.emit('room:leave');
     $('waitingScreen').classList.remove('active');
-    estadoAtual = EstadoJogo.MENU_MODO;
+    estadoAtual = EstadoJogo.MENU_PRINCIPAL;
 };
 
-// Eventos do Socket.io
 if (socket) {
     socket.on('rooms:update', list => {
         $('roomsList').innerHTML = list.length ? list.map(r => `
@@ -224,7 +577,7 @@ if (socket) {
                 <span>${r.name} (${r.players}/2)</span>
                 <button onclick="socket.emit('room:join', '${r.code}')">Entrar</button>
             </div>
-        `).join('') : '<span class="muted">Nenhuma sala disponivel.</span>';
+        `).join('') : '<span class="muted">Nenhuma sala disponível.</span>';
     });
 
     socket.on('room:created', d => {
@@ -240,10 +593,10 @@ if (socket) {
         jogadorNum = d.player;
     });
 
-    socket.on('match:start', s => {
+    socket.on('match:start', () => {
         $('onlineScreen').classList.remove('active');$('waitingScreen').classList.remove('active');
         estadoAtual = EstadoJogo.ONLINE_GAME;
-        toast(`X1 Iniciado! Voce e o Jogador ${jogadorNum}`);
+        toast(`X1 Iniciado! Você é o Jogador ${jogadorNum}`);
     });
 
     socket.on('opponentMoved', d => {
@@ -254,12 +607,5 @@ if (socket) {
     socket.on('room:error', msg => toast(msg));
 }
 
-// Auto-Entrar por Link Directo (?sala=CODIGO)
-const params = new URLSearchParams(location.search);
-const directCode = params.get('sala') || params.get('room');
-if (socket && directCode) {
-    abrirLobbyOnline();
-    setTimeout(() => socket.emit('room:join', directCode), 500);
-}
-
+// Iniciar Loop
 gameLoop();
