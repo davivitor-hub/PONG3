@@ -1,8 +1,132 @@
-const http=require('http');const fs=require('fs');const path=require('path');const WebSocket=require('ws');
-const PORT=process.env.PORT||3000, root=__dirname;let waiting=null, rooms=new Set();
-const server=http.createServer((req,res)=>{let u=req.url.split('?')[0];if(u==='/health'){res.writeHead(200,{'content-type':'application/json'});return res.end(JSON.stringify({ok:true,game:'pong-das-7-sombras',rooms:rooms.size,online:true}))}if(u==='/')u='/index.html';const f=path.join(root,u);if(!f.startsWith(root)||!fs.existsSync(f)){res.writeHead(404);return res.end('Not found')}res.writeHead(200,{'content-type':u.endsWith('.html')?'text/html; charset=utf-8':'text/plain; charset=utf-8'});res.end(fs.readFileSync(f))});
-const wss=new WebSocket.Server({server});
-function send(ws,msg){if(ws.readyState===1)ws.send(JSON.stringify(msg))}function newRoom(a,b){const r={a,b,state:{x:450,y:250,vx:420,vy:230,p1:250,p2:250,s1:0,s2:0},inputs:[{up:false,down:false},{up:false,down:false}],last:Date.now()};rooms.add(r);a.room=r;a.player=1;b.room=r;b.player=2;send(a,{type:'matched',player:1});send(b,{type:'matched',player:2})}
-wss.on('connection',ws=>{ws.isAlive=true;ws.on('pong',()=>ws.isAlive=true);ws.on('message',raw=>{let m;try{m=JSON.parse(raw)}catch{return}if(m.type==='queue'){ws.name=String(m.name||'Jogador').slice(0,16);ws.skin=String(m.skin||'neon');if(waiting&&waiting.readyState===1&&waiting!==ws){const a=waiting;waiting=null;newRoom(a,ws);send(a,{type:'status',message:'Adversário encontrado!'});send(ws,{type:'status',message:'Adversário encontrado!'})}else{waiting=ws;send(ws,{type:'status',message:'Aguardando outro jogador...'})}}if(m.type==='input'&&ws.room){const i=ws.player-1;ws.room.inputs[i]={up:!!m.up,down:!!m.down}}});ws.on('close',()=>{if(waiting===ws)waiting=null;if(ws.room){const r=ws.room;rooms.delete(r);const other=ws.player===1?r.b:r.a;if(other)send(other,{type:'status',message:'O adversário saiu da partida.'});if(other)other.room=null}})});
-setInterval(()=>{for(const ws of wss.clients){if(ws.isAlive===false){try{ws.terminate()}catch{};continue}ws.isAlive=false;try{ws.ping()}catch{}}for(const r of rooms){const s=r.state,dt=Math.min((Date.now()-r.last)/1000,.05);r.last=Date.now();for(let i=0;i<2;i++){let q=r.inputs[i],k=i? 'p2':'p1';s[k]+=((q.down?1:0)-(q.up?1:0))*360*dt;s[k]=Math.max(60,Math.min(440,s[k]))}s.x+=s.vx*dt;s.y+=s.vy*dt;if(s.y<12||s.y>488)s.vy*=-1;if(s.x<50&&Math.abs(s.y-s.p1)<65){s.x=50;s.vx=Math.abs(s.vx)*1.015;s.vy+=(s.y-s.p1)*3}if(s.x>850&&Math.abs(s.y-s.p2)<65){s.x=850;s.vx=-Math.abs(s.vx)*1.015;s.vy+=(s.y-s.p2)*3}if(s.x<0){s.s2++;s.x=450;s.y=250;s.vx=420;s.vy=(Math.random()-.5)*300}if(s.x>900){s.s1++;s.x=450;s.y=250;s.vx=-420;s.vy=(Math.random()-.5)*300}send(r.a,{type:'state',state:s});send(r.b,{type:'state',state:s})}},16);
-server.listen(PORT,()=>console.log(`Pong das 7 Sombras server running on ${PORT}`));
+const express = require('express');
+const http = require('http');
+const path = require('path');
+const { Server } = require('socket.io');
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: '*' }
+});
+
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/health', (req, res) => res.status(200).send('OK'));
+
+app.get('/join/:roomId', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+const rooms = {};
+
+function generateRoomId() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+io.on('connection', (socket) => {
+  socket.on('rooms:list', () => {
+    const publicRooms = Object.values(rooms)
+      .filter(r => r.public && r.players.length < 2)
+      .map(r => ({ code: r.id, name: r.name, players: r.players.length }));
+    socket.emit('rooms:update', publicRooms);
+  });
+
+  socket.on('room:create', (data = {}) => {
+    let roomId = data.code || generateRoomId();
+    while (rooms[roomId]) {
+      roomId = generateRoomId();
+    }
+
+    rooms[roomId] = {
+      id: roomId,
+      name: data.name || `Sala ${roomId}`,
+      public: data.public !== undefined ? data.public : true,
+      players: [socket.id],
+      j1Y: 250,
+      j2Y: 250,
+      pontosJ1: 0,
+      pontosJ2: 0,
+      bola: { x: 400, y: 300, vx: 7, vy: 2 },
+      gameStarted: false
+    };
+
+    socket.join(roomId);
+    socket.roomId = roomId;
+    socket.playerNum = 1;
+
+    socket.emit('room:created', { code: roomId, name: rooms[roomId].name, player: 1 });
+  });
+
+  socket.on('room:join', (roomId) => {
+    const room = rooms[roomId];
+    if (!room) {
+      socket.emit('room:error', 'Sala nao encontrada!');
+      return;
+    }
+    if (room.players.length >= 2) {
+      socket.emit('room:error', 'Sala cheia!');
+      return;
+    }
+
+    room.players.push(socket.id);
+    socket.join(roomId);
+    socket.roomId = roomId;
+    socket.playerNum = 2;
+
+    socket.emit('room:joined', { code: roomId, player: 2 });
+    
+    io.to(roomId).emit('match:start', {
+      p1: room.j1Y,
+      p2: room.j2Y,
+      score1: room.pontosJ1,
+      score2: room.pontosJ2,
+      ball: room.bola,
+      running: true
+    });
+  });
+
+  socket.on('paddle:set', (y) => {
+    const room = rooms[socket.roomId];
+    if (!room) return;
+
+    if (socket.playerNum === 1) room.j1Y = y;
+    else if (socket.playerNum === 2) room.j2Y = y;
+
+    socket.to(socket.roomId).emit('opponentMoved', {
+      player: socket.playerNum,
+      y: y
+    });
+  });
+
+  socket.on('updateGameState', (state) => {
+    const room = rooms[socket.roomId];
+    if (!room || socket.playerNum !== 1) return;
+
+    room.bola = state.ball;
+    room.pontosJ1 = state.score1;
+    room.pontosJ2 = state.score2;
+
+    socket.to(socket.roomId).emit('state', state);
+  });
+
+  socket.on('room:leave', () => {
+    leaveRoom(socket);
+  });
+
+  socket.on('disconnect', () => {
+    leaveRoom(socket);
+  });
+
+  function leaveRoom(s) {
+    const roomId = s.roomId;
+    if (roomId && rooms[roomId]) {
+      io.to(roomId).emit('room:closed');
+      delete rooms[roomId];
+    }
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Servidor rodando na porta ${PORT}`);
+});
