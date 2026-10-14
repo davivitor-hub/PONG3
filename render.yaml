@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: pongdas7sombras
+    name: pong-neon-arena
     runtime: node
     buildCommand: npm install
     startCommand: npm start

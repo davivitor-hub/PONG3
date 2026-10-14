@@ -5,180 +5,151 @@ const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-
-const io = new Server(server, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
-  }
-});
-
-// Serve arquivos estáticos da pasta public
+const io = new Server(server, { cors: { origin: '*' }, transports: ['websocket', 'polling'] });
 app.use(express.static(path.join(__dirname, 'public')));
+app.get('/health', (_req, res) => res.status(200).send('OK'));
+app.get('/join/:roomId', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
-app.get('/health', (req, res) => res.status(200).send('OK'));
+const rooms = new Map();
+const waiting = [];
+const W = 800, H = 600, PADDLE_H = 100, BALL_R = 10;
+let roomCounter = 100000;
 
-app.get('/join/:roomId', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-const rooms = {};
-const W = 800, H = 600;
-
-function generateRoomId() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+function newRoomId() {
+  let id;
+  do { roomCounter = (roomCounter + 7919) % 900000 + 100000; id = String(roomCounter); } while (rooms.has(id));
+  return id;
 }
-
-function updateRoomPhysics(room) {
-  if (!room.gameStarted || room.players.length < 2) return;
-
-  let b = room.bola;
-  b.x += b.vx;
-  b.y += b.vy;
-
-  if (b.y <= 10 || b.y >= H - 10) {
-    b.vy *= -1;
-    b.y = Math.max(10, Math.min(H - 10, b.y));
-  }
-
-  if (b.x <= 45 && b.x >= 24 && b.y >= room.j1Y - 4 && b.y <= room.j1Y + 100 && b.vx < 0) {
-    b.vx = Math.min(Math.abs(b.vx) * 1.05 + 0.1, 15);
-    b.vy += (b.y - room.j1Y - 50) / 18;
-    b.x = 45;
-  }
-
-  if (b.x >= 755 && b.x <= 776 && b.y >= room.j2Y - 4 && b.y <= room.j2Y + 100 && b.vx > 0) {
-    b.vx = -Math.min(Math.abs(b.vx) * 1.05 + 0.1, 15);
-    b.vy += (b.y - room.j2Y - 50) / 18;
-    b.x = 755;
-  }
-
-  if (b.x < -20) {
-    room.pontosJ2++;
-    resetBall(room, 1);
-  }
-
-  if (b.x > W + 20) {
-    room.pontosJ1++;
-    resetBall(room, -1);
-  }
+function makeBall(dir = Math.random() < .5 ? -1 : 1) {
+  const angle = (Math.random() * .9) - .45;
+  const speed = 8.8;
+  return { x: W/2, y: H/2, vx: Math.cos(angle) * speed * dir, vy: Math.sin(angle) * speed };
 }
-
+function createRoom(socket) {
+  const id = newRoomId();
+  const room = { id, players: [socket.id], p1: H/2-PADDLE_H/2, p2: H/2-PADDLE_H/2,
+    score1: 0, score2: 0, ball: makeBall(), started: false, powerup: null, powerTimer: 0,
+    lastHit: 0, created: Date.now() };
+  rooms.set(id, room);
+  socket.join(id); socket.roomId = id; socket.playerNum = 1;
+  socket.emit('match:role', { player: 1, roomId: id });
+  socket.emit('match:waiting', { roomId: id, player: 1, link: `/join/${id}` });
+  return room;
+}
+function joinRoom(socket, id) {
+  const room = rooms.get(String(id));
+  if (!room) { socket.emit('match:error', 'Partida não encontrada. Volte ao menu e tente novamente.'); return; }
+  if (room.players.length >= 2 || room.players.includes(socket.id)) {
+    if (room.players.includes(socket.id)) return;
+    socket.emit('match:error', 'Essa partida já está cheia.'); return;
+  }
+  room.players.push(socket.id);
+  socket.join(room.id); socket.roomId = room.id; socket.playerNum = 2; room.started = true;
+  socket.emit('match:role', { player: 2, roomId: room.id });
+  io.to(room.players[0]).emit('match:role', { player: 1, roomId: room.id });
+  room.ball = makeBall();
+  io.to(room.id).emit('match:start', snapshot(room));
+}
+function snapshot(r) {
+  return { p1:r.p1, p2:r.p2, score1:r.score1, score2:r.score2, ball:r.ball,
+    powerup:r.powerup, running:r.started, playerCount:r.players.length };
+}
+function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
 function resetBall(room, dir) {
-  room.bola = {
-    x: W / 2,
-    y: H / 2,
-    vx: 7 * dir,
-    vy: (Math.random() - 0.5) * 6
-  };
+  room.ball = makeBall(dir);
+  room.powerup = null;
+  room.powerTimer = 0;
 }
-
+function update(room) {
+  if (!room.started || room.players.length !== 2) return;
+  const b = room.ball;
+  b.x += b.vx; b.y += b.vy;
+  if (b.y < BALL_R || b.y > H-BALL_R) {
+    b.y = clamp(b.y, BALL_R, H-BALL_R); b.vy *= -1;
+  }
+  // Rebate com ângulo determinado pelo ponto de contato e aceleração progressiva.
+  if (b.vx < 0 && b.x-BALL_R <= 42 && b.x > 20 && b.y >= room.p1-BALL_R && b.y <= room.p1+PADDLE_H+BALL_R) {
+    const offset = clamp((b.y-(room.p1+PADDLE_H/2))/(PADDLE_H/2), -1, 1);
+    const speed = Math.min(Math.hypot(b.vx,b.vy)*1.075 + .25, 18);
+    const angle = offset * 0.95;
+    b.vx = Math.cos(angle)*speed; b.vy = Math.sin(angle)*speed;
+    b.x = 42+BALL_R; room.lastHit = 1;
+    io.to(room.players[0]).emit('fx:hit', {side:1});
+  }
+  if (b.vx > 0 && b.x+BALL_R >= W-42 && b.x < W-20 && b.y >= room.p2-BALL_R && b.y <= room.p2+PADDLE_H+BALL_R) {
+    const offset = clamp((b.y-(room.p2+PADDLE_H/2))/(PADDLE_H/2), -1, 1);
+    const speed = Math.min(Math.hypot(b.vx,b.vy)*1.075 + .25, 18);
+    const angle = offset * 0.95;
+    b.vx = -Math.cos(angle)*speed; b.vy = Math.sin(angle)*speed;
+    b.x = W-42-BALL_R; room.lastHit = 2;
+    io.to(room.players[1]).emit('fx:hit', {side:2});
+  }
+  // Bônus de energia aparece ocasionalmente no centro.
+  room.powerTimer++;
+  if (!room.powerup && room.powerTimer > 900 && Math.random() < .012) {
+    room.powerup = { x: W/2, y: 75 + Math.random()*(H-150), type: Math.random()<.5?'boost':'slow' };
+    room.powerTimer = 0;
+  }
+  if (room.powerup && Math.hypot(b.x-room.powerup.x,b.y-room.powerup.y)<22) {
+    const type = room.powerup.type;
+    if (type === 'boost') {
+      const speed = Math.min(Math.hypot(b.vx,b.vy)*1.22, 19);
+      const angle = Math.atan2(b.vy,b.vx); b.vx=Math.cos(angle)*speed; b.vy=Math.sin(angle)*speed;
+    } else {
+      const speed = Math.max(6, Math.hypot(b.vx,b.vy)*.78);
+      const angle = Math.atan2(b.vy,b.vx); b.vx=Math.cos(angle)*speed; b.vy=Math.sin(angle)*speed;
+    }
+    io.to(room.id).emit('fx:power', {type});
+    room.powerup = null;
+  }
+  if (b.x < -BALL_R) { room.score2++; io.to(room.id).emit('fx:point',{winner:2}); resetBall(room, 1); }
+  if (b.x > W+BALL_R) { room.score1++; io.to(room.id).emit('fx:point',{winner:1}); resetBall(room, -1); }
+}
 setInterval(() => {
-  for (const roomId in rooms) {
-    const room = rooms[roomId];
-    if (room.gameStarted && room.players.length === 2) {
-      updateRoomPhysics(room);
-      io.to(roomId).emit('state', {
-        p1: room.j1Y,
-        p2: room.j2Y,
-        score1: room.pontosJ1,
-        score2: room.pontosJ2,
-        ball: room.bola,
-        running: true
-      });
-    }
+  for (const room of rooms.values()) {
+    update(room);
+    if (room.started) io.to(room.id).emit('state', snapshot(room));
   }
-}, 1000 / 60);
+}, 1000/60);
 
-io.on('connection', (socket) => {
-  socket.on('rooms:list', () => {
-    const publicRooms = Object.values(rooms)
-      .filter(r => r.public && r.players.length < 2)
-      .map(r => ({ code: r.id, name: r.name, players: r.players.length }));
-    socket.emit('rooms:update', publicRooms);
-  });
-
-  socket.on('room:create', (data = {}) => {
-    let roomId = data.code || generateRoomId();
-    while (rooms[roomId]) {
-      roomId = generateRoomId();
+io.on('connection', socket => {
+  socket.on('match:find', () => {
+    if (socket.roomId && rooms.has(socket.roomId)) return;
+    // Reuse the oldest waiting match whose host is still connected.
+    let room = null;
+    while (waiting.length && !room) {
+      const id = waiting.shift();
+      const candidate = rooms.get(id);
+      if (candidate && !candidate.started && candidate.players.length === 1 && io.sockets.sockets.has(candidate.players[0])) room = candidate;
     }
-
-    rooms[roomId] = {
-      id: roomId,
-      name: data.name || `Sala ${roomId}`,
-      public: data.public !== undefined ? data.public : true,
-      players: [socket.id],
-      j1Y: 250,
-      j2Y: 250,
-      pontosJ1: 0,
-      pontosJ2: 0,
-      bola: { x: 400, y: 300, vx: 7, vy: 2 },
-      gameStarted: false
-    };
-
-    socket.join(roomId);
-    socket.roomId = roomId;
-    socket.playerNum = 1;
-
-    socket.emit('room:created', { code: roomId, name: rooms[roomId].name, player: 1 });
-  });
-
-  socket.on('room:join', (roomId) => {
-    const room = rooms[roomId];
-    if (!room) {
-      socket.emit('room:error', 'Sala não encontrada!');
-      return;
+    if (room) joinRoom(socket, room.id);
+    else {
+      room = createRoom(socket);
+      waiting.push(room.id);
     }
-    if (room.players.length >= 2) {
-      socket.emit('room:error', 'Sala cheia!');
-      return;
+  });
+  socket.on('match:join-link', id => joinRoom(socket, id));
+  socket.on('paddle:set', y => {
+    const room = rooms.get(socket.roomId);
+    if (!room || !Number.isFinite(y)) return;
+    const safeY = clamp(y, 0, H-PADDLE_H);
+    if (socket.playerNum === 1) room.p1 = safeY;
+    else if (socket.playerNum === 2) room.p2 = safeY;
+  });
+  socket.on('match:leave', () => leaveRoom(socket, true));
+  socket.on('disconnect', () => leaveRoom(socket, false));
+  function leaveRoom(s, notify) {
+    const id = s.roomId;
+    if (!id) return;
+    const room = rooms.get(id);
+    if (room) {
+      if (notify) s.leave(id);
+      io.to(id).emit('match:opponent-left');
+      rooms.delete(id);
+      const idx = waiting.indexOf(id); if (idx >= 0) waiting.splice(idx, 1);
     }
-
-    room.players.push(socket.id);
-    socket.join(roomId);
-    socket.roomId = roomId;
-    socket.playerNum = 2;
-    room.gameStarted = true;
-
-    socket.emit('room:joined', { code: roomId, player: 2 });
-
-    io.to(roomId).emit('match:start', {
-      p1: room.j1Y,
-      p2: room.j2Y,
-      score1: room.pontosJ1,
-      score2: room.pontosJ2,
-      ball: room.bola,
-      running: true
-    });
-  });
-
-  socket.on('paddle:set', (y) => {
-    const room = rooms[socket.roomId];
-    if (!room) return;
-
-    if (socket.playerNum === 1) room.j1Y = y;
-    else if (socket.playerNum === 2) room.j2Y = y;
-  });
-
-  socket.on('room:leave', () => {
-    leaveRoom(socket);
-  });
-
-  socket.on('disconnect', () => {
-    leaveRoom(socket);
-  });
-
-  function leaveRoom(s) {
-    const roomId = s.roomId;
-    if (roomId && rooms[roomId]) {
-      io.to(roomId).emit('room:closed');
-      delete rooms[roomId];
-    }
+    s.roomId = null; s.playerNum = null;
   }
 });
-
-const PORT = process.env.PORT || 10000;
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
-});
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log(`Pong Neon Arena rodando na porta ${PORT}`));
